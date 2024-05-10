@@ -18,3 +18,17 @@ YOHO (You Only Hear Once) is a modification of OpenAI's Whisper model that perfo
 -   [ ] Develop a clustering-based algorithm to distinguish and segment different speakers.
 -   [ ] Create a model that converts clustered vectors into voice prints for speaker identification.
 -   [ ] Embed the voice-print prediction functionality into the original model, eliminating the need for a separate model.
+
+## Development Setup
+
+1. **Install dependencies:**
+
+    ```sh
+    poetry install
+    ```
+
+2. **Install pre-commit hooks:**
+
+    ```sh
+    pre-commit install
+    ```
