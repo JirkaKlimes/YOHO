@@ -12,6 +12,7 @@ readme = "README.md"
 python = "^3.11"
 jaxlib = { version = "^0.4.26+cuda12.cudnn89", platform = "linux", source = "jax" }
 flax = "^0.8.2"
+safetensors = "^0.4.3"
 
 [[tool.poetry.source]]
 name = "jax"
