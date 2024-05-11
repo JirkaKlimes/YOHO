@@ -75,15 +75,3 @@ def generate_mel_filters(
     enorm = 2.0 / (mel_f[2 : n_mels + 2] - mel_f[:n_mels])
     weights *= enorm[:, np.newaxis]
     return weights
-
-
-if __name__ == "__main__":
-    import librosa
-
-    SR = 16000
-    N_FFT = 400
-    N_MELS = 80
-
-    filters = librosa.filters.mel(sr=SR, n_fft=N_FFT, n_mels=N_MELS)
-    filters_jax = generate_mel_filters(sr=SR, n_fft=N_FFT, n_mels=N_MELS)
-    print(np.all(filters == filters_jax))
