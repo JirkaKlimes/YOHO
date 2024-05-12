@@ -38,14 +38,17 @@ class Whisper(nn.Module):
 
 if __name__ == "__main__":
     import jax
+    from flax.traverse_util import flatten_dict, unflatten_dict
+
+    from yoho.train.convert_weights import parse_weights
 
     N_MELS = 80
+    N_VOCAB = 51865
+    AUDIO_SEQ_LEN = 1500
     AUDIO_DIMS = 512
-    AUDIO_SEQ_LEN = 1024
     AUDIO_HEADS = 8
     AUDIO_LAYERS = 6
-    TEXT_VOCAB_SIZE = 30522
-    TEXT_SEQ_LEN = 1024
+    TEXT_SEQ_LEN = 448
     TEXT_DIMS = 512
     TEXT_HEADS = 8
     TEXT_LAYERS = 6
@@ -55,15 +58,26 @@ if __name__ == "__main__":
         audio_seq_len=AUDIO_SEQ_LEN,
         audio_heads=AUDIO_HEADS,
         audio_layers=AUDIO_LAYERS,
-        text_vocab_size=TEXT_VOCAB_SIZE,
+        text_vocab_size=N_VOCAB,
         text_seq_len=TEXT_SEQ_LEN,
         text_dims=TEXT_DIMS,
         text_heads=TEXT_HEADS,
         text_layers=TEXT_LAYERS,
     )
+
     dummy_mel = jnp.ones((1, 2 * AUDIO_SEQ_LEN, N_MELS))
     dummy_tokens = jnp.ones((1, TEXT_SEQ_LEN), dtype=jnp.uint32)
+    print(model.tabulate(jax.random.key(0), dummy_mel, dummy_tokens))
     variables = model.init(jax.random.key(0), dummy_mel, dummy_tokens)
 
-    logits = model.apply(variables, dummy_mel, dummy_tokens)
-    print("Logits shape:", logits.shape)
+    parsed_weights = parse_weights("./weights/model_base_multi.safetensors")
+    flat_params = flatten_dict(variables["params"])
+    for name in flat_params:
+        flat_params[name] = parsed_weights[name]
+    params = unflatten_dict(flat_params)
+    variables["params"] = params
+
+    out = model.apply(variables, dummy_mel, dummy_tokens)
+
+    print(out)
+    print(out.shape)

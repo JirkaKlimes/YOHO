@@ -38,21 +38,17 @@ class MultiHeadAttention(nn.Module):
         q: jnp.ndarray,
         kv: Optional[jnp.ndarray] = None,
         mask: Optional[jnp.ndarray] = None,
-        kv_cache: Optional[dict] = None,
     ) -> jnp.ndarray:
         q = self.query_proj(q)
 
-        if kv_cache is None or kv is None or "key" not in kv_cache:
-            k = self.key_proj(q if kv is None else kv)
-            v = self.value_proj(q if kv is None else kv)
-        else:
-            k = kv_cache["key"]
-            v = kv_cache["value"]
+        k = self.key_proj(q if kv is None else kv)
+        v = self.value_proj(q if kv is None else kv)
 
         qk = q @ k.transpose((0, 2, 1))
         scale = (self.dims // self.n_head) ** -0.25
         qk = qk * scale
 
+        # TODO: fix masking (probably don't use add)
         if mask is not None:
             qk += mask
 
@@ -88,17 +84,15 @@ class DecoderBlock(nn.Module):
     n_heads: int
 
     @nn.compact
-    def __call__(
-        self, q: jnp.ndarray, kv: jnp.ndarray, mask: jnp.ndarray, kv_cache: Optional[dict] = None
-    ) -> jnp.ndarray:
+    def __call__(self, q: jnp.ndarray, kv: jnp.ndarray, mask: jnp.ndarray) -> jnp.ndarray:
         res = q
         q = nn.LayerNorm()(q)
-        q = MultiHeadAttention(self.dims, self.n_heads)(q, q, mask=mask, kv_cache=kv_cache)
+        q = MultiHeadAttention(self.dims, self.n_heads)(q, q, mask=mask)
         q += res
 
         res = q
         x = nn.LayerNorm()(q)
-        x = MultiHeadAttention(self.dims, self.n_heads)(q, kv, kv_cache=kv_cache)
+        x = MultiHeadAttention(self.dims, self.n_heads)(q, kv)
         x += res
         res = x
 
@@ -147,13 +141,15 @@ class TextDecoder(nn.Module):
             nn.initializers.glorot_uniform(),
             (self.seq_len, self.dims),
         )
-        q = nn.Embed(self.vocab_size, self.dims)(q)
+        embed_layer = nn.Embed(self.vocab_size, self.dims)
+        q = embed_layer(q)
         q += pos
 
         for _ in range(self.n_layers):
-            q = DecoderBlock(self.dims, self.n_heads)(q, kv, mask=jnp.zeros_like(kv))
+            # TODO: add triangular matrix as mask
+            q = DecoderBlock(self.dims, self.n_heads)(q, kv, mask=None)
 
         x = nn.LayerNorm()(q)
-        logits = x @ jnp.transpose(pos)
+        logits = x @ embed_layer.embedding.T
 
         return logits
