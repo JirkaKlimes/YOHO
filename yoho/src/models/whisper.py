@@ -39,22 +39,30 @@ class Whisper(nn.Module):
 if __name__ == "__main__":
     import jax
 
-    model_dims = {
-        "audio_dims": 512,
-        "audio_seq_len": 1024,
-        "audio_heads": 8,
-        "audio_layers": 6,
-        "text_vocab_size": 30522,
-        "text_seq_len": 512,
-        "text_dims": 512,
-        "text_heads": 8,
-        "text_layers": 6,
-    }
-    model = Whisper(**model_dims)
-    dummy_mel = jnp.ones((1, model_dims["audio_seq_len"], model_dims["audio_dims"]))
-    dummy_tokens = jax.random.randint(
-        jax.random.PRNGKey(0), (1, model_dims["text_seq_len"]), 0, model_dims["text_vocab_size"]
+    N_MELS = 80
+    AUDIO_DIMS = 512
+    AUDIO_SEQ_LEN = 1024
+    AUDIO_HEADS = 8
+    AUDIO_LAYERS = 6
+    TEXT_VOCAB_SIZE = 30522
+    TEXT_SEQ_LEN = 1024
+    TEXT_DIMS = 512
+    TEXT_HEADS = 8
+    TEXT_LAYERS = 6
+
+    model = Whisper(
+        audio_dims=AUDIO_DIMS,
+        audio_seq_len=AUDIO_SEQ_LEN,
+        audio_heads=AUDIO_HEADS,
+        audio_layers=AUDIO_LAYERS,
+        text_vocab_size=TEXT_VOCAB_SIZE,
+        text_seq_len=TEXT_SEQ_LEN,
+        text_dims=TEXT_DIMS,
+        text_heads=TEXT_HEADS,
+        text_layers=TEXT_LAYERS,
     )
+    dummy_mel = jnp.ones((1, 2 * AUDIO_SEQ_LEN, N_MELS))
+    dummy_tokens = jnp.ones((1, TEXT_SEQ_LEN), dtype=jnp.uint32)
     variables = model.init(jax.random.key(0), dummy_mel, dummy_tokens)
 
     logits = model.apply(variables, dummy_mel, dummy_tokens)

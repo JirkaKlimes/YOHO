@@ -56,7 +56,7 @@ class MultiHeadAttention(nn.Module):
         if mask is not None:
             qk += mask
 
-        attn_weights = jnp.softmax(qk, axis=-1)
+        attn_weights = nn.softmax(qk, axis=-1)
         wv = attn_weights @ v
 
         return self.out_proj(wv)
@@ -120,11 +120,10 @@ class AudioEncoder(nn.Module):
 
     @nn.compact
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
-        x = nn.Conv(self.dims, 3)(x)
+        x = nn.Conv(self.dims, (3,))(x)
         x = nn.gelu(x)
-        x = nn.Conv(self.dims, 3, strides=2)(x)
+        x = nn.Conv(self.dims, (3,), strides=2)(x)
         x = nn.gelu(x)
-        x = jnp.transpose(x, (0, 2, 1))
         x = SinPositionalEncoding(self.seq_len, self.dims)(x)
 
         for _ in range(self.n_layers):
@@ -145,14 +144,14 @@ class TextDecoder(nn.Module):
     def __call__(self, q: jnp.ndarray, kv: jnp.ndarray) -> jnp.ndarray:
         pos = self.param(
             "positional_embedding",
-            nn.initializers.glorot_uniform,
+            nn.initializers.glorot_uniform(),
             (self.seq_len, self.dims),
         )
         q = nn.Embed(self.vocab_size, self.dims)(q)
         q += pos
 
         for _ in range(self.n_layers):
-            q = DecoderBlock(self.dims, self.n_heads)(q, kv)
+            q = DecoderBlock(self.dims, self.n_heads)(q, kv, mask=jnp.zeros_like(kv))
 
         x = nn.LayerNorm()(q)
         logits = x @ jnp.transpose(pos)
