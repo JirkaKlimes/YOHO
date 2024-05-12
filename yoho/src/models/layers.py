@@ -48,9 +48,10 @@ class MultiHeadAttention(nn.Module):
         scale = (self.dims // self.n_head) ** -0.25
         qk = qk * scale
 
-        # TODO: fix masking (probably don't use add)
+        # TODO: fix masking (probably don't use add) (slicing also prob. not necessary)
         if mask is not None:
-            qk += mask
+            seq_len = q.shape[1]
+            qk += mask[:seq_len, :seq_len]
 
         attn_weights = nn.softmax(qk, axis=-1)
         wv = attn_weights @ v
@@ -136,6 +137,7 @@ class TextDecoder(nn.Module):
 
     @nn.compact
     def __call__(self, q: jnp.ndarray, kv: jnp.ndarray) -> jnp.ndarray:
+        seq_len = q.shape[1]
         pos = self.param(
             "positional_embedding",
             nn.initializers.glorot_uniform(),
@@ -143,11 +145,12 @@ class TextDecoder(nn.Module):
         )
         embed_layer = nn.Embed(self.vocab_size, self.dims)
         q = embed_layer(q)
-        q += pos
+        q += pos[:seq_len]
+
+        mask = jnp.triu(jnp.full((seq_len, seq_len), -jnp.inf), 1)
 
         for _ in range(self.n_layers):
-            # TODO: add triangular matrix as mask
-            q = DecoderBlock(self.dims, self.n_heads)(q, kv, mask=None)
+            q = DecoderBlock(self.dims, self.n_heads)(q, kv, mask=mask)
 
         x = nn.LayerNorm()(q)
         logits = x @ embed_layer.embedding.T
