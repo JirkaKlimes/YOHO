@@ -35,7 +35,7 @@ def parse_weights(path: Path):
         else:
             name = name.replace("weight", "kernel")
 
-        if "Dense" in name and "kernel" in name:
+        if ("Dense" in name or "proj" in name) and "kernel" in name:
             permute = (1, 0)
         elif "Conv" in name and "kernel" in name:
             permute = (2, 1, 0)

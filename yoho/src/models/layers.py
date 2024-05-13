@@ -44,19 +44,26 @@ class MultiHeadAttention(nn.Module):
         k = self.key_proj(q if kv is None else kv)
         v = self.value_proj(q if kv is None else kv)
 
-        qk = q @ k.transpose((0, 2, 1))
-        scale = (self.dims // self.n_head) ** -0.25
-        qk = qk * scale
-
-        # TODO: fix masking (probably don't use add) (slicing also prob. not necessary)
-        if mask is not None:
-            seq_len = q.shape[1]
-            qk += mask[:seq_len, :seq_len]
-
-        attn_weights = nn.softmax(qk, axis=-1)
-        wv = attn_weights @ v
+        wv = self.qkv_attention(q, k, v, mask=mask)
 
         return self.out_proj(wv)
+
+    def qkv_attention(self, q, k, v, mask=None):
+        batch_size, seq_len, dims = q.shape
+        scale = (dims // self.n_head) ** -0.25
+
+        q = q.reshape(*q.shape[:2], self.n_head, -1).transpose(0, 2, 1, 3) * scale
+        k = k.reshape(*k.shape[:2], self.n_head, -1).transpose(0, 2, 3, 1) * scale
+        v = v.reshape(*v.shape[:2], self.n_head, -1).transpose(0, 2, 1, 3)
+
+        qk = jnp.einsum("bnij,bnjk->bnik", q, k)
+        if mask is not None:
+            qk += mask[:seq_len, :seq_len]
+
+        w = nn.softmax(qk)
+        output = (w @ v).transpose(0, 2, 1, 3).reshape(batch_size, seq_len, -1)
+
+        return output
 
 
 class EncoderBlock(nn.Module):
@@ -92,10 +99,9 @@ class DecoderBlock(nn.Module):
         q += res
 
         res = q
-        x = nn.LayerNorm()(q)
+        q = nn.LayerNorm()(q)
         x = MultiHeadAttention(self.dims, self.n_heads)(q, kv)
         x += res
-        res = x
 
         res = x
         x = nn.LayerNorm()(x)
@@ -115,9 +121,9 @@ class AudioEncoder(nn.Module):
 
     @nn.compact
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
-        x = nn.Conv(self.dims, (3,))(x)
+        x = nn.Conv(self.dims, 3, padding=1, dtype=jnp.float32)(x)
         x = nn.gelu(x)
-        x = nn.Conv(self.dims, (3,), strides=2)(x)
+        x = nn.Conv(self.dims, 3, padding=1, strides=2, dtype=jnp.float32)(x)
         x = nn.gelu(x)
         x = SinPositionalEncoding(self.seq_len, self.dims)(x)
 
