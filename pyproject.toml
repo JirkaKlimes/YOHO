@@ -17,6 +17,8 @@ torch = "^2.3.0"
 tiktoken = "^0.6.0"
 tqdm = "^4.66.4"
 numba = "^0.59.1"
+matplotlib = "^3.8.4"
+pyqt6 = "^6.7.0"
 
 [[tool.poetry.source]]
 name = "jax"
