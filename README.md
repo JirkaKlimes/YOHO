@@ -12,8 +12,8 @@ YOHO (You Only Hear Once) is a modification of OpenAI's Whisper model that perfo
 
 ## To-Do List
 
--   [ ] Implement the Whisper model using the JAX framework for improved performance.
--   [ ] Import pre-trained weights from OpenAI's Whisper model using the Hugging Face repository.
+-   [x] Implement the Whisper model using the JAX framework for improved performance.
+-   [x] Import pre-trained weights from OpenAI's Whisper model using the Hugging Face repository.
 -   [ ] Extract only the necessary languages from the large-v3 model into a base model.
 -   [ ] Develop a clustering-based algorithm to distinguish and segment different speakers.
 -   [ ] Embed the voice-print prediction functionality into the original model, eliminating the need for a separate model.
