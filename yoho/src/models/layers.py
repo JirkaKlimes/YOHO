@@ -24,6 +24,7 @@ class SinPositionalEncoding(nn.Module):
 
 
 class MultiHeadAttention(nn.Module):
+    # TODO: add KV cache
     dims: int
     n_head: int
 
@@ -56,7 +57,7 @@ class MultiHeadAttention(nn.Module):
         k = k.reshape(*k.shape[:2], self.n_head, -1).transpose(0, 2, 3, 1) * scale
         v = v.reshape(*v.shape[:2], self.n_head, -1).transpose(0, 2, 1, 3)
 
-        qk = jnp.einsum("bnij,bnjk->bnik", q, k)
+        qk = q @ k
         if mask is not None:
             qk += mask[:seq_len, :seq_len]
 

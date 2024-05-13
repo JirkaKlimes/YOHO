@@ -1,10 +1,11 @@
 import base64
 import itertools
 import pickle
+from subprocess import run
 import jax
 import jax.numpy as jnp
 import flax.linen as nn
-from flax.traverse_util import flatten_dict, unflatten_dict
+import numpy as np
 
 from yoho.src.models.layers import AudioEncoder, TextDecoder
 
@@ -182,52 +183,10 @@ def get_encoding():
     )
 
 
-def get_whisper():
-    from yoho.train.convert_weights import parse_weights
-
-    N_MELS = 80
-    N_VOCAB = 51865
-    AUDIO_SEQ_LEN = 1500
-    AUDIO_DIMS = 512
-    AUDIO_HEADS = 8
-    AUDIO_LAYERS = 6
-    TEXT_SEQ_LEN = 448
-    TEXT_DIMS = 512
-    TEXT_HEADS = 8
-    TEXT_LAYERS = 6
-
-    model = Whisper(
-        audio_dims=AUDIO_DIMS,
-        audio_seq_len=AUDIO_SEQ_LEN,
-        audio_heads=AUDIO_HEADS,
-        audio_layers=AUDIO_LAYERS,
-        text_vocab_size=N_VOCAB,
-        text_seq_len=TEXT_SEQ_LEN,
-        text_dims=TEXT_DIMS,
-        text_heads=TEXT_HEADS,
-        text_layers=TEXT_LAYERS,
-    )
-
-    dummy_mel = jnp.ones((1, 2 * AUDIO_SEQ_LEN, N_MELS))
-    dummy_tokens = jnp.ones((1, TEXT_SEQ_LEN), dtype=jnp.uint32)
-    # print(model.tabulate(jax.random.key(0), dummy_mel, dummy_tokens))
-    variables = model.init(jax.random.key(0), dummy_mel, dummy_tokens)
-
-    parsed_weights = parse_weights("./weights/model_base_multi.safetensors")
-    flat_params = flatten_dict(variables["params"])
-    for name in flat_params:
-        flat_params[name] = parsed_weights[name]
-    params = unflatten_dict(flat_params)
-    variables["params"] = params
-
-    return model, variables
-
-
 if __name__ == "__main__":
     import jax
-    from flax.traverse_util import flatten_dict, unflatten_dict
 
-    from yoho.train.convert_weights import parse_weights
+    from yoho.src.preprocessing.mel_spectogram import generate_mel_filters
 
     N_MELS = 80
     N_VOCAB = 51865
@@ -252,54 +211,69 @@ if __name__ == "__main__":
         text_layers=TEXT_LAYERS,
     )
 
-    dummy_mel = jnp.ones((1, 2 * AUDIO_SEQ_LEN, N_MELS))
-    dummy_tokens = jnp.ones((1, TEXT_SEQ_LEN), dtype=jnp.uint32)
-    # print(model.tabulate(jax.random.key(0), dummy_mel, dummy_tokens))
-    variables = model.init(jax.random.key(0), dummy_mel, dummy_tokens)
+    with open("./weights/params.bin", "rb") as f:
+        params = pickle.load(f)
 
-    parsed_weights = parse_weights("./weights/model_base_multi.safetensors")
-    flat_params = flatten_dict(variables["params"])
-    for name in flat_params:
-        flat_params[name] = parsed_weights[name]
-    params = unflatten_dict(flat_params)
-    variables["params"] = params
-
-    with open("model.bin", "wb") as f:
-        pickle.dump((variables, model), f)
-
-    print("weights loaded")
-    # out = model.apply(variables, dummy_mel, dummy_tokens)
+    variables = {"params": params}
 
     SAMPLE_RATE = 16000
     N_FFT = 400
     HOP_LENGTH = 160
     CHUNK_LENGTH = 30
-    N_SAMPLES = CHUNK_LENGTH * SAMPLE_RATE  # 480000 samples in a 30-second chunk
+    N_SAMPLES = CHUNK_LENGTH * SAMPLE_RATE
 
-    from original_whisper.whisper.audio import log_mel_spectrogram
-
-    mel = log_mel_spectrogram(
-        "/home/jirka/Downloads/ted_interview.mp3", N_MELS, padding=N_SAMPLES, device="cpu"
-    )
-    mel = jnp.asarray(mel, jnp.float32)[None, :, :3000].transpose((0, 2, 1))
+    cmd = [
+        "ffmpeg",
+        "-nostdin",
+        "-threads",
+        "0",
+        "-i",
+        "/home/jirka/Downloads/ted_interview.mp3",
+        "-f",
+        "s16le",
+        "-ac",
+        "1",
+        "-acodec",
+        "pcm_s16le",
+        "-ar",
+        "16000",
+        "-",
+    ]
+    out = run(cmd, capture_output=True, check=True).stdout
+    buffer = np.frombuffer(out, np.int16).flatten().astype(np.float32) / 32768.0
+    buffer = np.pad(buffer, (0, N_SAMPLES - buffer.shape[0]))
+    stft = jax.scipy.signal.stft(buffer, nperseg=N_FFT, noverlap=N_FFT - HOP_LENGTH)[-1]
+    magnitudes = jnp.abs(stft)[..., :-1] ** 2
+    filters = generate_mel_filters(SAMPLE_RATE, N_FFT, N_MELS)
+    mel_spec = filters @ magnitudes
+    log_spec = jnp.log10(jnp.clip(mel_spec, a_min=1e-10))
+    log_spec = jnp.maximum(log_spec, log_spec.max() - 8.0)
+    log_spec = (log_spec + 4.0) / 4.0
+    mel = log_spec.T[None]
     encoded_audio = model.apply(variables, mel, method=Whisper.encode_audio)
-    print(encoded_audio)
 
     enc = get_encoding()
 
-    lst = [
-        enc._special_tokens["<|startoftranscript|>"],
-        enc._special_tokens["<|en|>"],
-        enc._special_tokens["<|transcribe|>"],
-    ]
+    @jax.jit
+    def fn(mel, tok):
+        out = model.apply(variables, mel, tok, method=Whisper.decode_text)
+        return out
+
+    decoded_text = np.zeros(TEXT_SEQ_LEN, dtype=np.uint64)
+    decoded_text[0] = enc._special_tokens["<|startoftranscript|>"]
+    decoded_text[2] = enc._special_tokens["<|transcribe|>"]
+
+    pos = 1
 
     while True:
-        out = model.apply(variables, encoded_audio, jnp.array([lst]), method=Whisper.decode_text)
-        print(out.shape)
-        out = jnp.argmax(out[0], axis=-1)
-        print("model out:", enc.decode(out))
-        lst.append(out[-1])
-        dec = enc.decode(lst)
+        if pos == 2:
+            pos += 1
+            continue
+        out = fn(encoded_audio, jnp.array([decoded_text]))[0, pos - 1]
+        idx = int(jnp.argmax(out.at[enc._special_tokens["<|notimestamps|>"]].set(0), axis=-1))
+        decoded_text[pos] = idx
+        pos += 1
+        dec = enc.decode(decoded_text[:pos])
         print(dec)
-        if dec.endswith("<|endoftext|>"):
-            quit()
+        if idx == enc._special_tokens["<|endoftext|>"]:
+            break
