@@ -2,10 +2,7 @@
 name = "YOHO"
 version = "0.1.0"
 description = "You Only Hear Once"
-authors = [
-    "JirkaKlimes <jiriklimes920@gmail.com>",
-    "OndraBaudisch <ondrabaudisch@gmail.com>",
-]
+authors = ["JirkaKlimes <jiriklimes920@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
