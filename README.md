@@ -2,21 +2,22 @@
 
 ## Overview
 
-YOHO (You Only Hear Once) is a modification of OpenAI's Whisper model that performs speaker diarization, and speaker identification using a single feature extractor.
+YOHO (You Only Hear Once) is system that performs ASR with speaker diarization, and speaker recognition using a single neural network.
 
 ## Features
 
--   Speech-to-Text: Accurate transcription of speech to text.
--   Speaker Diarization: Identification and separation of different speakers in an audio stream.
--   Speaker Identification (Voice Prints): Recognition of known speakers via unique voice prints.
+-   ASR (Automatic Speech Recognition): Accurate transcription of speech to text.
+-   Speaker Diarization: Separation of different speakers in an audio stream.
+-   Speaker Recognition (Voice Prints): Recognition of known speakers via unique voice prints.
 
 ## To-Do List
 
 -   [x] Implement the Whisper model using the JAX framework for improved performance.
 -   [x] Import pre-trained weights from OpenAI's Whisper model using the Hugging Face repository.
--   [ ] Extract only the necessary languages from the large-v3 model into a base model.
--   [ ] Develop a clustering-based algorithm to distinguish and segment different speakers.
--   [ ] Embed the voice-print prediction functionality into the original model, eliminating the need for a separate model.
+-   [ ] Write scraper that will generate large dataset of audio tracks with transcriptions.
+-   [ ] Use Whisper model as baseline and develop better model.
+-   [ ] Train a Transformer VAE to reconstruct speech utterances. The decoder will use the transcript for cross-attention, allowing the latent representation to focus on extracting the voice print while offloading the text information.
+-   [ ] Use the new model for voice print generation and fine-tune the original model to output the voice print after each utterance transcript.
 
 ## Development Setup
 
