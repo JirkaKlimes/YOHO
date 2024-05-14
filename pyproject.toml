@@ -12,6 +12,7 @@ flax = "^0.8.2"
 tiktoken = "^0.6.0"
 matplotlib = "^3.8.4"
 pyqt6 = "^6.7.0"
+bpeasy = "^0.1.2"
 
 [[tool.poetry.source]]
 name = "jax"

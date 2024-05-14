@@ -241,6 +241,8 @@ if __name__ == "__main__":
     ]
     out = run(cmd, capture_output=True, check=True).stdout
     buffer = np.frombuffer(out, np.int16).flatten().astype(np.float32) / 32768.0
+    if buffer.shape[0] > N_SAMPLES:
+        buffer = buffer[:N_SAMPLES]
     buffer = np.pad(buffer, (0, N_SAMPLES - buffer.shape[0]))
     stft = jax.scipy.signal.stft(buffer, nperseg=N_FFT, noverlap=N_FFT - HOP_LENGTH)[-1]
     magnitudes = jnp.abs(stft)[..., :-1] ** 2
