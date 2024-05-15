@@ -13,9 +13,9 @@ def load_tokenizer(vocab_path: Path, yoho_config: YOHOConfig):
 
     special_tokens = [
         "<|startoftranscript|>",
-        "<|resumeoftranscript|>",
-        "<|nospeech|>",
-        *[f"<|{i}|>" for i in range(yoho_config.max_audio_len)],
+        "<|endoftranscript|>",
+        "<|voiceprint|>",
+        *[f"<|t-{i}|>" for i in range(yoho_config.max_audio_len)],
     ]
 
     tokenizer = BPEasyTokenizer(
