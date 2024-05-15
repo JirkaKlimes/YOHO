@@ -1,11 +1,5 @@
-import base64
-import itertools
-import pickle
-from subprocess import run
-import jax
 import jax.numpy as jnp
 import flax.linen as nn
-import numpy as np
 
 from yoho.src.models.layers import AudioEncoder, TextDecoder
 
@@ -48,145 +42,14 @@ class Whisper(nn.Module):
         return logits
 
 
-LANGUAGES = {
-    "en": "english",
-    "zh": "chinese",
-    "de": "german",
-    "es": "spanish",
-    "ru": "russian",
-    "ko": "korean",
-    "fr": "french",
-    "ja": "japanese",
-    "pt": "portuguese",
-    "tr": "turkish",
-    "pl": "polish",
-    "ca": "catalan",
-    "nl": "dutch",
-    "ar": "arabic",
-    "sv": "swedish",
-    "it": "italian",
-    "id": "indonesian",
-    "hi": "hindi",
-    "fi": "finnish",
-    "vi": "vietnamese",
-    "he": "hebrew",
-    "uk": "ukrainian",
-    "el": "greek",
-    "ms": "malay",
-    "cs": "czech",
-    "ro": "romanian",
-    "da": "danish",
-    "hu": "hungarian",
-    "ta": "tamil",
-    "no": "norwegian",
-    "th": "thai",
-    "ur": "urdu",
-    "hr": "croatian",
-    "bg": "bulgarian",
-    "lt": "lithuanian",
-    "la": "latin",
-    "mi": "maori",
-    "ml": "malayalam",
-    "cy": "welsh",
-    "sk": "slovak",
-    "te": "telugu",
-    "fa": "persian",
-    "lv": "latvian",
-    "bn": "bengali",
-    "sr": "serbian",
-    "az": "azerbaijani",
-    "sl": "slovenian",
-    "kn": "kannada",
-    "et": "estonian",
-    "mk": "macedonian",
-    "br": "breton",
-    "eu": "basque",
-    "is": "icelandic",
-    "hy": "armenian",
-    "ne": "nepali",
-    "mn": "mongolian",
-    "bs": "bosnian",
-    "kk": "kazakh",
-    "sq": "albanian",
-    "sw": "swahili",
-    "gl": "galician",
-    "mr": "marathi",
-    "pa": "punjabi",
-    "si": "sinhala",
-    "km": "khmer",
-    "sn": "shona",
-    "yo": "yoruba",
-    "so": "somali",
-    "af": "afrikaans",
-    "oc": "occitan",
-    "ka": "georgian",
-    "be": "belarusian",
-    "tg": "tajik",
-    "sd": "sindhi",
-    "gu": "gujarati",
-    "am": "amharic",
-    "yi": "yiddish",
-    "lo": "lao",
-    "uz": "uzbek",
-    "fo": "faroese",
-    "ht": "haitian creole",
-    "ps": "pashto",
-    "tk": "turkmen",
-    "nn": "nynorsk",
-    "mt": "maltese",
-    "sa": "sanskrit",
-    "lb": "luxembourgish",
-    "my": "myanmar",
-    "bo": "tibetan",
-    "tl": "tagalog",
-    "mg": "malagasy",
-    "as": "assamese",
-    "tt": "tatar",
-    "haw": "hawaiian",
-    "ln": "lingala",
-    "ha": "hausa",
-    "ba": "bashkir",
-    "jw": "javanese",
-    "su": "sundanese",
-}
-
-
-def get_encoding():
-    with open("./weights/multilingual.tiktoken") as f:
-        ranks = {
-            base64.b64decode(token): int(rank)
-            for token, rank in (line.split() for line in f if line)
-        }
-    n_vocab = len(ranks)
-    specials = [
-        "<|endoftext|>",
-        "<|startoftranscript|>",
-        *[f"<|{lang}|>" for lang in LANGUAGES.keys()],
-        "<|translate|>",
-        "<|transcribe|>",
-        "<|startoflm|>",
-        "<|startofprev|>",
-        "<|nospeech|>",
-        "<|notimestamps|>",
-        *[f"<|{i * 0.02:.2f}|>" for i in range(1501)],
-    ]
-    special_tokens = dict(zip(specials, itertools.count(n_vocab)))
-    n_vocab += len(specials)
-    import tiktoken
-
-    return tiktoken.Encoding(
-        name="multilingual",
-        explicit_n_vocab=n_vocab,
-        pat_str=r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""",
-        mergeable_ranks=ranks,
-        special_tokens=special_tokens,
-    )
-
-
 if __name__ == "__main__":
     import jax
+    from pathlib import Path
+    import pickle
+    import numpy as np
 
-    from yoho.src.preprocessing.mel_spectogram import generate_mel_filters
+    from yoho.src.preprocessing.audio import load_audio, mel_spectogram, normalize_spectogram
+    from yoho.src.tokenizer import get_tokenizer
 
     N_MELS = 80
     N_VOCAB = 51865
@@ -198,6 +61,12 @@ if __name__ == "__main__":
     TEXT_DIMS = 512
     TEXT_HEADS = 8
     TEXT_LAYERS = 6
+
+    SAMPLE_RATE = 16000
+    N_FFT = 400
+    HOP_LENGTH = 160
+    CHUNK_LENGTH = 30
+    N_SAMPLES = CHUNK_LENGTH * SAMPLE_RATE
 
     model = Whisper(
         audio_dims=AUDIO_DIMS,
@@ -216,45 +85,18 @@ if __name__ == "__main__":
 
     variables = {"params": params}
 
-    SAMPLE_RATE = 16000
-    N_FFT = 400
-    HOP_LENGTH = 160
-    CHUNK_LENGTH = 30
-    N_SAMPLES = CHUNK_LENGTH * SAMPLE_RATE
+    audio = load_audio(Path("/home/jirka/Downloads/ted_interview.mp3"), SAMPLE_RATE)
 
-    cmd = [
-        "ffmpeg",
-        "-nostdin",
-        "-threads",
-        "0",
-        "-i",
-        "/home/jirka/Downloads/ted_interview.mp3",
-        "-f",
-        "s16le",
-        "-ac",
-        "1",
-        "-acodec",
-        "pcm_s16le",
-        "-ar",
-        "16000",
-        "-",
-    ]
-    out = run(cmd, capture_output=True, check=True).stdout
-    buffer = np.frombuffer(out, np.int16).flatten().astype(np.float32) / 32768.0
-    if buffer.shape[0] > N_SAMPLES:
-        buffer = buffer[:N_SAMPLES]
-    buffer = np.pad(buffer, (0, N_SAMPLES - buffer.shape[0]))
-    stft = jax.scipy.signal.stft(buffer, nperseg=N_FFT, noverlap=N_FFT - HOP_LENGTH)[-1]
-    magnitudes = jnp.abs(stft)[..., :-1] ** 2
-    filters = generate_mel_filters(SAMPLE_RATE, N_FFT, N_MELS)
-    mel_spec = filters @ magnitudes
-    log_spec = jnp.log10(jnp.clip(mel_spec, a_min=1e-10))
-    log_spec = jnp.maximum(log_spec, log_spec.max() - 8.0)
-    log_spec = (log_spec + 4.0) / 4.0
-    mel = log_spec.T[None]
-    encoded_audio = model.apply(variables, mel, method=Whisper.encode_audio)
+    if audio.shape[0] > N_SAMPLES:
+        audio = audio[:N_SAMPLES]
+    audio = np.pad(audio, (0, N_SAMPLES - audio.shape[0]))
 
-    enc = get_encoding()
+    spectogram = mel_spectogram(audio, N_FFT, HOP_LENGTH, SAMPLE_RATE, N_MELS)
+    norm_spectogram = normalize_spectogram(spectogram)
+
+    encoded_audio = model.apply(variables, norm_spectogram[None], method=Whisper.encode_audio)
+
+    tokenizer = get_tokenizer()
 
     @jax.jit
     def fn(mel, tok):
@@ -262,20 +104,21 @@ if __name__ == "__main__":
         return out
 
     decoded_text = np.zeros(TEXT_SEQ_LEN, dtype=np.uint64)
-    decoded_text[0] = enc._special_tokens["<|startoftranscript|>"]
-    decoded_text[2] = enc._special_tokens["<|transcribe|>"]
+    decoded_text[0] = tokenizer._special_tokens["<|startoftranscript|>"]
+    decoded_text[2] = tokenizer._special_tokens["<|transcribe|>"]
+    decoded_text[3] = tokenizer._special_tokens["<|notimestamps|>"]
 
     pos = 1
 
     while True:
-        if pos == 2:
+        if pos in [2, 3]:
             pos += 1
             continue
         out = fn(encoded_audio, jnp.array([decoded_text]))[0, pos - 1]
-        idx = int(jnp.argmax(out.at[enc._special_tokens["<|notimestamps|>"]].set(0), axis=-1))
+        idx = int(jnp.argmax(out, axis=-1))
         decoded_text[pos] = idx
         pos += 1
-        dec = enc.decode(decoded_text[:pos])
+        dec = tokenizer.decode(decoded_text[:pos])
         print(dec)
-        if idx == enc._special_tokens["<|endoftext|>"]:
+        if idx == tokenizer._special_tokens["<|endoftext|>"]:
             break

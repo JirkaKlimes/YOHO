@@ -1,5 +1,7 @@
 import warnings
 import numpy as np
+import jax.numpy as jnp
+from functools import cache
 
 
 def hz_to_mel(frequencies, htk=False):
@@ -48,6 +50,7 @@ def mel_frequencies(
     return hz
 
 
+@cache
 def generate_mel_filters(
     sr: float,
     n_fft: int,
@@ -74,4 +77,4 @@ def generate_mel_filters(
 
     enorm = 2.0 / (mel_f[2 : n_mels + 2] - mel_f[:n_mels])
     weights *= enorm[:, np.newaxis]
-    return weights
+    return jnp.array(weights)
