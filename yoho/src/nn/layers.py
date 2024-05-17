@@ -51,7 +51,7 @@ class GroupedQueryAttention(nn.Module):
         kv_heads = self.kv_heads or self.heads
         kv = q if kv is None else kv
 
-        assert q_heads % kv_heads == 0, "num kv heads must be diviseble by num of q heads"
+        assert q_heads % kv_heads == 0, "num of kv heads must be divisible by num of q heads"
         assert q_heads >= kv_heads, "num of q heads must be greater or equal to num of kv heads"
 
         # TODO: check if it's better to apply RoPE to each head separately
