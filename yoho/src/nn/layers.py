@@ -25,14 +25,14 @@ class RoPE(nn.Module):
         _, seq_len, dim = x.shape
         assert not dim & 1, "number of input dims mut be even"
 
-        theta = jnp.arange(0, dim, 2)
-        inv_freq = 1.0 / (10000 ** (theta / dim))
-        freqs = jnp.outer(jnp.arange(seq_len), inv_freq)
-        freq_complex = jnp.e ** (1j * freqs)
+        numerator = jnp.arange(0, dim, 2)
+        thetas = 1.0 / (10000 ** (numerator / dim))
+        angles = jnp.outer(jnp.arange(1, seq_len + 1), thetas)
+        angles = jnp.e ** (1j * angles)
 
         x_complex = x[:, :, ::2] + 1j * x[:, :, 1::2]
 
-        x_rotated = x_complex * freq_complex[None]
+        x_rotated = x_complex * angles[None]
 
         x_out = jnp.empty_like(x)
         x_out = x_out.at[:, :, ::2].set(x_rotated.real)
