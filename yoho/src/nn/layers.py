@@ -38,7 +38,7 @@ class RoPE(nn.Module):
 
 
 class GroupedQueryAttention(nn.Module):
-    heads: int
+    q_heads: int
     dims: int
     kv_heads: Optional[int] = None
 
@@ -50,10 +50,11 @@ class GroupedQueryAttention(nn.Module):
         mask: Optional[jnp.ndarray] = None,
     ):
         # TODO: add kv cache
-        batch_size, seq_len, in_dims = q.shape
+        batch_size, q_seq_len, in_dims = q.shape
+        batch_size, kv_seq_len, in_dims = kv.shape
 
-        q_heads = self.heads
-        kv_heads = self.kv_heads or self.heads
+        q_heads = self.q_heads
+        kv_heads = self.kv_heads or self.q_heads
         kv = q if kv is None else kv
 
         assert q_heads % kv_heads == 0, "num of kv heads must be divisible by num of q heads"
@@ -65,9 +66,9 @@ class GroupedQueryAttention(nn.Module):
         xk = xk.repeat(2, axis=-1)
         xv = xv.repeat(2, axis=-1)
 
-        xq = xq.reshape(batch_size, seq_len, q_heads, self.dims)
-        xk = xk.reshape(batch_size, seq_len, q_heads, self.dims)
-        xv = xv.reshape(batch_size, seq_len, q_heads, self.dims)
+        xq = xq.reshape(batch_size, q_seq_len, q_heads, self.dims)
+        xk = xk.reshape(batch_size, kv_seq_len, q_heads, self.dims)
+        xv = xv.reshape(batch_size, kv_seq_len, q_heads, self.dims)
         xq = xq.transpose(0, 2, 1, 3)
         xk = xk.transpose(0, 2, 1, 3)
         xv = xv.transpose(0, 2, 1, 3)
@@ -77,9 +78,56 @@ class GroupedQueryAttention(nn.Module):
 
         xk = xk.transpose(0, 1, 3, 2)
         attention_scores = (xq @ xk) * (self.dims / q_heads) ** -0.5
-        attention_scores -= 1 / mask - 1
+        if mask is not None:
+            attention_scores -= 1 / mask - 1
         attention_scores = nn.softmax(attention_scores)
-        out = (attention_scores @ xv).transpose(0, 2, 1, 3).reshape(batch_size, seq_len, -1)
+        out = (attention_scores @ xv).transpose(0, 2, 1, 3).reshape(batch_size, q_seq_len, -1)
         out = nn.Dense(in_dims, use_bias=False)(out)
 
         return out
+
+
+class EncoderBlock(nn.Module):
+    q_heads: int
+    kv_heads: int
+    dims: int
+
+    @nn.compact
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        res = x
+        x = nn.RMSNorm()(x)
+        x = GroupedQueryAttention(self.q_heads, self.dims, self.kv_heads)(x, x)
+        x += res
+
+        res = x
+        x = nn.RMSNorm()(x)
+        x = SwiGLU(self.dims * 2)(x)
+        x += res
+
+        return x
+
+
+class DecoderBlock(nn.Module):
+    q_heads: int
+    kv_heads: int
+    dims: int
+
+    @nn.compact
+    def __call__(self, q: jnp.ndarray, kv: jnp.ndarray, mask: jnp.ndarray) -> jnp.ndarray:
+        res = q
+        q = nn.RMSNorm()(q)
+        q = GroupedQueryAttention(self.q_heads, self.dims, self.kv_heads)(q, q, mask=mask)
+        q += res
+
+        res = q
+        q = nn.RMSNorm()(q)
+        kv = nn.RMSNorm()(kv)
+        x = GroupedQueryAttention(self.q_heads, self.dims, self.kv_heads)(q, kv)
+        x += res
+
+        res = x
+        x = nn.RMSNorm()(x)
+        x = SwiGLU(self.dims * 2)(x)
+        x += res
+
+        return x
