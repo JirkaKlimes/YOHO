@@ -6,6 +6,7 @@ from eld import LanguageDetector
 from yoho.src.preprocessing.tokenizer import load_tokenizer
 from yoho.src.config import YOHOConfig
 from train.utils.config import CONFIG
+from train.utils.standardize_text import standardize
 
 
 def load_transcripts():
@@ -22,7 +23,7 @@ def load_transcripts():
         if lang not in CONFIG.language_whitelist:
             continue
         for utterance in utterances:
-            yield utterance
+            yield standardize(utterance)
 
 
 vocab = train_bpe(
