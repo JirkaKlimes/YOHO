@@ -23,7 +23,7 @@ def load_transcripts():
         if lang not in CONFIG.language_whitelist:
             continue
         for utterance in utterances:
-            yield standardize(utterance)
+            yield standardize(utterance, lang)
 
 
 vocab = train_bpe(
