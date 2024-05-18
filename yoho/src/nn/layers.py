@@ -4,6 +4,8 @@ import flax.linen as nn
 
 
 class SwiGLU(nn.Module):
+    """https://arxiv.org/pdf/2002.05202"""
+
     hidden_dim: int
 
     @nn.compact
@@ -18,6 +20,8 @@ class SwiGLU(nn.Module):
 
 
 class RoPE(nn.Module):
+    """https://arxiv.org/pdf/2104.09864"""
+
     @nn.compact
     def __call__(self, x: jnp.ndarray):
         seq_len, dim = x.shape[-2:]
@@ -38,6 +42,8 @@ class RoPE(nn.Module):
 
 
 class GroupedQueryAttention(nn.Module):
+    """https://arxiv.org/pdf/2305.13245"""
+
     q_heads: int
     dims: int
     kv_heads: Optional[int] = None
@@ -88,6 +94,8 @@ class GroupedQueryAttention(nn.Module):
 
 
 class EncoderBlock(nn.Module):
+    """https://arxiv.org/pdf/1706.03762"""
+
     q_heads: int
     kv_heads: int
     dims: int
@@ -108,6 +116,8 @@ class EncoderBlock(nn.Module):
 
 
 class DecoderBlock(nn.Module):
+    """https://arxiv.org/pdf/1706.03762"""
+
     q_heads: int
     kv_heads: int
     dims: int
