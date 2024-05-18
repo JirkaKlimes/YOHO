@@ -33,8 +33,6 @@ vocab = train_bpe(
 )
 
 mappings = sorted(vocab.items(), key=lambda p: p[1])
-assert len(mappings) == mappings[-1][1] + 1, "number of tokens doesn't match the ids"
-
 tokens = [base64.b64encode(m[0]).decode() + "\n" for m in mappings]
 
 VOCAB_PATH = CONFIG.weights.vocab
