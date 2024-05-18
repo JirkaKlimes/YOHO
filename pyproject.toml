@@ -2,8 +2,10 @@
 name = "YOHO"
 version = "0.1.0"
 description = "You Only Hear Once"
+license = "MIT"
 authors = ["JirkaKlimes <jiriklimes920@gmail.com>"]
 readme = "README.md"
+exclude = ["train"]
 
 [tool.poetry.dependencies]
 python = "^3.11"
