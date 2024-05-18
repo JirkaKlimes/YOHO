@@ -1,0 +1,31 @@
+[dataset]
+noisy = '~/asr_dataset/noisy'
+clean = '~/asr_dataset/clean'
+ambient = '~/asr_dataset/ambient'
+speakers = '~/asr_dataset/speakers'
+
+[hyperparameters.tokenizer]
+max_token_length = 32
+vocab_size = 16000
+
+[hyperparameters.transcribe_pretrain]
+learning_rate = 0.003
+batch_size = 64
+updates = 250000
+speechless_sample_ratio = 0.1
+
+[hyperparameters.reconstruct_pretrain]
+learning_rate = 0.003
+batch_size = 64
+updates = 250000
+
+[hyperparameters.encoder_finetune]
+learning_rate = 0.003
+batch_size = 128
+updates = 100000
+
+[hyperparameters.transcribe_finetune]
+learning_rate = 0.003
+batch_size = 64
+updates = 250000
+speechless_sample_ratio = 0.1
