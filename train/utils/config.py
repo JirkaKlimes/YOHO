@@ -7,6 +7,7 @@ import toml
 class Dataset(BaseModel):
     noisy: Path
     clean: Path
+    finetune: Path
     ambient: Path
     speakers: Path
 

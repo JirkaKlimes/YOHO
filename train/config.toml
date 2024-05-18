@@ -3,6 +3,7 @@ language_whitelist = ['cs']
 [dataset]
 noisy = '/home/jirka/asr_dataset/noisy'
 clean = '/home/jirka/asr_dataset/clean'
+finetune = '/home/jirka/asr_dataset/finetune'
 ambient = '/home/jirka/asr_dataset/ambient'
 speakers = '/home/jirka/asr_dataset/speakers'
 

@@ -13,6 +13,7 @@ def load_transcripts():
     paths = [
         *CONFIG.dataset.noisy.joinpath("./transcripts").iterdir(),
         *CONFIG.dataset.clean.joinpath("./transcripts").iterdir(),
+        *CONFIG.dataset.finetune.joinpath("./transcripts").iterdir(),
     ]
 
     for p in paths:
