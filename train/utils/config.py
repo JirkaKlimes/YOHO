@@ -1,3 +1,4 @@
+from typing import List
 from pydantic import BaseModel
 from pathlib import Path
 import toml
@@ -51,6 +52,7 @@ class Config(BaseModel):
     dataset: Dataset
     hyperparameters: Hyperparameters
     weights: Weights
+    language_whitelist: List[str]
 
 
 with open("./train/config.toml") as f:

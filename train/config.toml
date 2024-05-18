@@ -1,8 +1,11 @@
+language_whitelist = ['cs']
+
 [dataset]
-noisy = '~/asr_dataset/noisy'
-clean = '~/asr_dataset/clean'
-ambient = '~/asr_dataset/ambient'
-speakers = '~/asr_dataset/speakers'
+noisy = '/home/jirka/asr_dataset/noisy'
+clean = '/home/jirka/asr_dataset/clean'
+ambient = '/home/jirka/asr_dataset/ambient'
+speakers = '/home/jirka/asr_dataset/speakers'
+
 
 [weights]
 vocab = './weights/vocab.txt'
@@ -13,7 +16,7 @@ yoho = './weights/yoho.safetensors'
 
 [hyperparameters.tokenizer]
 max_token_length = 32
-vocab_size = 16000
+vocab_size = 32000
 
 [hyperparameters.transcribe_pretrain]
 learning_rate = 0.003
