@@ -13,13 +13,13 @@ class YOHOConfig:
     max_audio_len: int = 2048
     max_text_len: int = 512
 
-    dims: int = 400
+    dims: int = 512
 
-    n_audio_heads: int = 6
-    n_audio_blocks: int = 5
+    n_audio_heads: int = 8
+    n_audio_blocks: int = 6
 
-    n_text_heads: int = 6
-    n_text_blocks: int = 5
+    n_text_heads: int = 8
+    n_text_blocks: int = 6
 
     @property
     def max_input_seconds(self):
