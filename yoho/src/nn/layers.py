@@ -65,16 +65,19 @@ class GroupedQueryAttention(nn.Module):
 
         assert q_heads % kv_heads == 0, "num of kv heads must be divisible by num of q heads"
         assert q_heads >= kv_heads, "num of q heads must be greater or equal to num of kv heads"
+        assert self.dims % q_heads == 0, "dims must be divisible by num of q heads"
 
-        xq = nn.Dense(q_heads * self.dims, use_bias=False)(q)
-        xk = nn.Dense(kv_heads * self.dims, use_bias=False)(kv)
-        xv = nn.Dense(kv_heads * self.dims, use_bias=False)(kv)
-        xk = xk.repeat(2, axis=-1)
-        xv = xv.repeat(2, axis=-1)
+        head_dim = self.dims // q_heads
 
-        xq = xq.reshape(batch_size, q_seq_len, q_heads, self.dims)
-        xk = xk.reshape(batch_size, kv_seq_len, q_heads, self.dims)
-        xv = xv.reshape(batch_size, kv_seq_len, q_heads, self.dims)
+        xq = nn.Dense(q_heads * head_dim, use_bias=False)(q)
+        xk = nn.Dense(kv_heads * head_dim, use_bias=False)(kv)
+        xv = nn.Dense(kv_heads * head_dim, use_bias=False)(kv)
+        xk = xk.repeat(q_heads // kv_heads, axis=-1)
+        xv = xv.repeat(q_heads // kv_heads, axis=-1)
+
+        xq = xq.reshape(batch_size, q_seq_len, q_heads, head_dim)
+        xk = xk.reshape(batch_size, kv_seq_len, q_heads, head_dim)
+        xv = xv.reshape(batch_size, kv_seq_len, q_heads, head_dim)
         xq = xq.transpose(0, 2, 1, 3)
         xk = xk.transpose(0, 2, 1, 3)
         xv = xv.transpose(0, 2, 1, 3)
@@ -83,7 +86,7 @@ class GroupedQueryAttention(nn.Module):
         xk = RoPE()(xk)
 
         xk = xk.transpose(0, 1, 3, 2)
-        attention_scores = (xq @ xk) * (self.dims / q_heads) ** -0.5
+        attention_scores = (xq @ xk) * head_dim**-0.5
         if mask is not None:
             attention_scores -= 1 / mask - 1
         attention_scores = nn.softmax(attention_scores)
@@ -109,7 +112,7 @@ class EncoderBlock(nn.Module):
 
         res = x
         x = nn.RMSNorm()(x)
-        x = SwiGLU(self.dims * 2)(x)
+        x = SwiGLU(self.dims * 3)(x)
         x += res
 
         return x
@@ -137,7 +140,7 @@ class DecoderBlock(nn.Module):
 
         res = x
         x = nn.RMSNorm()(x)
-        x = SwiGLU(self.dims * 2)(x)
+        x = SwiGLU(self.dims * 3)(x)
         x += res
 
         return x
