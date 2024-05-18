@@ -63,7 +63,6 @@ class Dataloader(ABC):
             worker.start()
 
         while self.warmup_queue and not self._batch_queue.full():
-            print("warming up")
             continue
 
     def get_prepared_batch(self):
