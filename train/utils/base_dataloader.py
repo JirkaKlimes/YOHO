@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 from typing import Any
 import multiprocessing as mp
 import warnings
-import numpy as np
 
 
 class Dataloader(ABC):
@@ -13,16 +12,21 @@ class Dataloader(ABC):
         max_queued_batches: int = 8,
         num_workers: int = 4,
         warmup_queue: bool = True,
+        use_multiprocessing: bool = True,
     ):
         self.batch_size = batch_size
         self.max_queued_batches = max_queued_batches
         self.num_workers = num_workers
         self.warmup_queue = warmup_queue
+        self.use_multiprocessing = use_multiprocessing
 
-        self._batch_queue = mp.Queue(self.max_queued_batches)
-        self._task_queues = [mp.Queue() for _ in range(num_workers)]
+        self.current_batch_idx = 0
 
-        self.start_workers()
+        if self.use_multiprocessing:
+            self._batch_queue = mp.Queue(self.max_queued_batches)
+            self._task_queues = [mp.Queue() for _ in range(num_workers)]
+
+            self.start_workers()
 
     @abstractmethod
     def get_num_batches(self) -> int:
@@ -50,8 +54,6 @@ class Dataloader(ABC):
             self._batch_queue.put(batch)
 
     def start_workers(self):
-        self.current_batch_idx = 0
-
         for _ in range(self.max_queued_batches):
             self._task_queues[self.current_batch_idx % self.num_workers].put(self.current_batch_idx)
             self.current_batch_idx = (self.current_batch_idx + 1) % self.num_batches
@@ -66,6 +68,11 @@ class Dataloader(ABC):
             continue
 
     def get_prepared_batch(self):
+        if not self.use_multiprocessing:
+            batch = self.get_batch(self.current_batch_idx)
+            self.current_batch_idx = (self.current_batch_idx + 1) % self.num_batches
+            return batch
+
         if self.num_prepared_batches == 0:
             warnings.warn(
                 f"Batches aren't preparing fast enough. Consider optimizing `{self.__class__.__name__}.{self.get_batch.__name__}` method"
@@ -75,7 +82,7 @@ class Dataloader(ABC):
         self.current_batch_idx = (self.current_batch_idx + 1) % self.num_batches
         return batch
 
-    def __del__(self):
+    def terminate(self):
         for q in self._task_queues:
             q.put(None)
 
@@ -84,48 +91,3 @@ class Dataloader(ABC):
 
         for worker in self._workers:
             worker.join()
-
-    terminate = __del__
-
-
-if __name__ == "__main__":
-    import time
-
-    class CustomDataloader(Dataloader):
-        def __init__(
-            self,
-            batch_size: int,
-            max_queue_size: int = 8,
-            max_processes: int = 4,
-            warmup_queue: bool = True,
-        ):
-            self.data_x = np.random.normal(size=(1024, 16))
-            self.data_y = np.random.normal(size=(1024, 4))
-            super().__init__(batch_size, max_queue_size, max_processes, warmup_queue)
-
-        def get_num_batches(self):
-            return self.data_x.shape[0] // self.batch_size
-
-        def get_batch(self, idx: int) -> Any:
-            i = idx * self.batch_size
-            j = (idx + 1) * self.batch_size
-
-            batch_x = self.data_x[i:j]
-            batch_y = self.data_y[i:j]
-
-            # some CPU intensive pre-processing like augmentation
-            for _ in range(32):
-                batch_x += np.random.normal(size=batch_x.shape)
-
-            return batch_x, batch_y
-
-    dataloader = CustomDataloader(32, 16, 8)
-
-    STEPS_PER_EPOCH = 5
-    for _ in range(STEPS_PER_EPOCH):
-        x, y = dataloader.get_prepared_batch()
-
-        # Some training logic
-        time.sleep(0.1)
-
-    dataloader.terminate()
