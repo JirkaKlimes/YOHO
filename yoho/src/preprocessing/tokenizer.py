@@ -1,13 +1,13 @@
+import base64
 from bpeasy.tokenizer import BPEasyTokenizer
 from pathlib import Path
-import pickle
 
 from yoho.src.config import YOHOConfig
 
 
 def load_tokenizer(vocab_path: Path, yoho_config: YOHOConfig):
-    with open(vocab_path, "rb") as f:
-        tokens = pickle.load(f)
+    with open(vocab_path, encoding="ascii") as f:
+        tokens = [base64.b64decode(t.rstrip()) for t in f.readlines()]
 
     vocab = {t: i for i, t in enumerate(tokens)}
 

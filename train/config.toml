@@ -4,6 +4,13 @@ clean = '~/asr_dataset/clean'
 ambient = '~/asr_dataset/ambient'
 speakers = '~/asr_dataset/speakers'
 
+[weights]
+vocab = './weights/vocab.txt'
+asr = './weights/asr.safetensors'
+voice_reconstruction = './weights/voice_reconstruction.safetensors'
+voiceprint = './weights/voiceprint.safetensors'
+yoho = './weights/yoho.safetensors'
+
 [hyperparameters.tokenizer]
 max_token_length = 32
 vocab_size = 16000
@@ -19,7 +26,7 @@ learning_rate = 0.003
 batch_size = 64
 updates = 250000
 
-[hyperparameters.encoder_finetune]
+[hyperparameters.voiceprint_finetune]
 learning_rate = 0.003
 batch_size = 128
 updates = 100000
