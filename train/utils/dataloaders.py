@@ -46,7 +46,7 @@ class TranscriptionDataloader(Dataloader):
             if lang not in CONFIG.language_whitelist:
                 continue
             sizes.append(len(transcript))
-            paths.append((path, self.root_path.joinpath("audio", path.with_suffix(".opus").name)))
+            paths.append((path, self.root_path.joinpath("audio", path.with_suffix(".mp3").name)))
             langs.append(lang)
 
         self.sizes = np.array(sizes, dtype=np.uint64).cumsum()
@@ -59,6 +59,10 @@ class TranscriptionDataloader(Dataloader):
         super().__init__(
             batch_size, max_queued_batches, num_workers, warmup_queue, use_multiprocessing
         )
+
+    def on_epoch(self):
+        if self.shuffle:
+            np.random.shuffle(self.index_table)
 
     def randomize_padding(self, start_time, end_time, start_speech_time, end_speech_time):
         duration = (end_speech_time - start_speech_time).total_seconds()
@@ -198,9 +202,9 @@ if __name__ == "__main__":
 
     tokenizer = load_tokenizer("./weights/vocab.txt", YOHOConfig())
 
-    BATCH_SIZE = 16
+    BATCH_SIZE = 32
     NUM_WORKERS = os.cpu_count()
-    MODEL_DELAY = 2
+    MODEL_DELAY = 1
 
     st = time.monotonic()
     dataloader = TranscriptionDataloader(
@@ -217,7 +221,7 @@ if __name__ == "__main__":
 
     while True:
         st = time.monotonic()
-        spectograms, tokens, lengths = dataloader.get_prepared_batch()
+        audio, tokens, lengths = dataloader.get_prepared_batch()
         et = time.monotonic()
         print(
             f"Batch was loaded in {et-st:.02f} seconds. Queue {dataloader.num_prepared_batches}/{dataloader.max_queued_batches}"
