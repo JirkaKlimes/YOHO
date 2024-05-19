@@ -45,6 +45,9 @@ def main(source_path, target_path, sample_rate, approx_duration):
             end_sample = int(np.ceil(end_time.total_seconds() * sample_rate))
             if chunk_transcription:
                 chunk_audio = audio[start_sample : min(end_sample, len(audio) - 1)]
+                for subtitle in chunk_transcription:
+                    subtitle.end -= start_time
+                    subtitle.start -= start_time
                 chunks.append((chunk_audio, chunk_transcription))
             if end_sample >= len(audio):
                 break
