@@ -21,7 +21,7 @@ vocab_size = 32000
 
 [hyperparameters.transcribe_pretrain]
 learning_rate = 0.003
-batch_size = 64
+batch_size = 16
 updates = 250000
 speechless_sample_ratio = 0.1
 
