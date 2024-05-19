@@ -23,6 +23,8 @@ class YOHOConfig:
 
     @property
     def max_input_seconds(self):
-        num_samples = self.n_fft + (self.max_audio_len - 1) * self.stft_hop
-        seconds = num_samples / self.sample_rate
-        return seconds
+        return self.n_samples / self.sample_rate
+
+    @property
+    def n_samples(self):
+        return self.n_fft + (self.max_audio_len - 1) * self.stft_hop
