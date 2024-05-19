@@ -1,6 +1,5 @@
 import warnings
 import numpy as np
-import jax.numpy as jnp
 from functools import cache
 
 
@@ -77,4 +76,4 @@ def generate_mel_filters(
 
     enorm = 2.0 / (mel_f[2 : n_mels + 2] - mel_f[:n_mels])
     weights *= enorm[:, np.newaxis]
-    return jnp.array(weights)
+    return weights
