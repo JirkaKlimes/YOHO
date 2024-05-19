@@ -11,7 +11,7 @@ from yoho.src.preprocessing.audio import load_audio, save_audio
 def main(source_path, target_path, sample_rate, approx_duration):
     source_path = Path(source_path)
     target_path = Path(target_path)
-    approx_chunk_duration = dt.timedelta(minutes=approx_duration)
+    approx_chunk_duration = dt.timedelta(seconds=approx_duration)
 
     audio_files = list(source_path.joinpath("audio").iterdir())
 
@@ -53,7 +53,7 @@ def main(source_path, target_path, sample_rate, approx_duration):
 
         for i, (audio, transcript) in enumerate(chunks):
             chunk_audio_path = target_path.joinpath(
-                "audio", audio_path.with_suffix(f".{i}.opus").name
+                "audio", audio_path.with_suffix(f".{i}.mp3").name
             )
             chunk_transcription_path = target_path.joinpath(
                 "transcripts", audio_path.with_suffix(f".{i}.srt").name
@@ -81,8 +81,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--approx_duration",
         type=int,
-        default=3,
-        help="Approximate duration of each chunk in minutes.",
+        default=48,
+        help="Approximate duration of each chunk in seconds.",
     )
 
     args = parser.parse_args()
