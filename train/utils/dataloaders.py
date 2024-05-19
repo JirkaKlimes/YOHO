@@ -25,6 +25,7 @@ class TranscriptionDataloader(Dataloader):
         num_workers: int = 4,
         warmup_queue: bool = True,
         use_multiprocessing: bool = True,
+        disable_warnings: bool = False,
     ):
         self.yoho_config = yoho_config
         self.tokenizer = tokenizer
@@ -57,7 +58,12 @@ class TranscriptionDataloader(Dataloader):
             np.random.shuffle(self.index_table)
 
         super().__init__(
-            batch_size, max_queued_batches, num_workers, warmup_queue, use_multiprocessing
+            batch_size,
+            max_queued_batches,
+            num_workers,
+            warmup_queue,
+            use_multiprocessing,
+            disable_warnings,
         )
 
     def on_epoch(self):
@@ -185,13 +191,25 @@ class TranscriptionDataloader(Dataloader):
             audio_batch.append(audio)
             tokens_batch.append(tokens)
 
-        audio_batch = np.array(audio_batch, dtype=np.float32)
+        audio_batch = np.array(audio_batch)
         seq_lengths = np.array([len(s) for s in tokens_batch])
         tokens_batch = np.array(
-            [np.pad(t, (0, self.yoho_config.max_text_len - len(t))) for t in tokens_batch],
+            [
+                t[: self.yoho_config.max_text_len]
+                if len(t) > self.yoho_config.max_text_len
+                else np.pad(t, (0, self.yoho_config.max_text_len - len(t)))
+                for t in tokens_batch
+            ],
             dtype=np.uint64,
         )
-        return audio_batch, tokens_batch, seq_lengths
+        loss_mask = np.zeros((self.batch_size, self.yoho_config.max_text_len), np.uint8)
+        for i, (length, tokens) in enumerate(zip(seq_lengths, tokens_batch)):
+            loss_mask[i, : length - 1] = 1
+            for j, tok in enumerate(tokens):
+                if tok == self.tokenizer.encode("<|voiceprint|>", allowed_special="all")[0]:
+                    loss_mask[i, j - 1] = 0
+
+        return audio_batch, tokens_batch, loss_mask
 
 
 if __name__ == "__main__":

@@ -13,12 +13,14 @@ class Dataloader(ABC):
         num_workers: int = 4,
         warmup_queue: bool = True,
         use_multiprocessing: bool = True,
+        disable_warnings: bool = False,
     ):
         self.batch_size = batch_size
         self.max_queued_batches = max_queued_batches
         self.num_workers = num_workers
         self.warmup_queue = warmup_queue
         self.use_multiprocessing = use_multiprocessing
+        self.disable_warnings = disable_warnings
 
         self.current_batch_idx = 0
 
@@ -79,7 +81,7 @@ class Dataloader(ABC):
                 self.on_epoch()
             return batch
 
-        if self.num_prepared_batches == 0:
+        if not self.disable_warnings and self.num_prepared_batches == 0:
             warnings.warn(
                 f"Batches aren't preparing fast enough. Consider optimizing `{self.__class__.__name__}.{self.get_batch.__name__}` method"
             )
