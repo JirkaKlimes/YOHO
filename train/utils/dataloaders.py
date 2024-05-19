@@ -6,7 +6,7 @@ import bisect
 import datetime as dt
 
 from yoho.src.config import YOHOConfig
-from yoho.src.preprocessing.audio import load_audio, mel_spectogram
+from yoho.src.preprocessing.audio import load_audio
 from yoho.src.preprocessing.tokenizer import BPEasyTokenizer
 
 from train.utils.base_dataloader import Dataloader
@@ -82,15 +82,20 @@ class TranscriptionDataloader(Dataloader):
         utterances.append(transcript[si])
         start_time = dt.timedelta() if si == 0 else transcript[si - 1].end
         start_speech_time = transcript[si].start
-        while (
-            transcript[si + 1].end - start_speech_time
-        ).total_seconds() < self.yoho_config.max_input_seconds:
+        while True:
+            if si >= len(transcript) - 2:
+                break
+            if (
+                not (transcript[si + 1].end - start_speech_time).total_seconds()
+                < self.yoho_config.max_input_seconds
+            ):
+                break
             si += 1
             utterances.append(transcript[si])
         end_speech_time = transcript[si].end
         end_time = (
             dt.timedelta(seconds=len(audio) / self.yoho_config.sample_rate)
-            if si == len(transcript) - 2
+            if si >= len(transcript) - 2
             else transcript[si + 1].start
         )
 
@@ -151,18 +156,10 @@ class TranscriptionDataloader(Dataloader):
                 sample_idx = int((sample_idx + 1) % self.sizes[-1])
             samples.append((audio, utterances))
 
-        spectograms_batch = []
+        audio_batch = []
         tokens_batch = []
 
         for audio, utterances in samples:
-            mel_spec = mel_spectogram(
-                audio,
-                self.yoho_config.n_fft,
-                self.yoho_config.stft_hop,
-                self.yoho_config.sample_rate,
-                self.yoho_config.n_mel_bands,
-                htk=True,
-            )
             transcript = "<|startoftranscript|>"
             for start, end, content in utterances:
                 start = int(
@@ -181,37 +178,48 @@ class TranscriptionDataloader(Dataloader):
                 transcript += content
             transcript += "<|endoftranscript|>"
             tokens = self.tokenizer.encode(transcript, allowed_special="all")
-            spectograms_batch.append(mel_spec)
+            audio_batch.append(audio)
             tokens_batch.append(tokens)
 
-        spectograms_batch = np.array(spectograms_batch, dtype=np.float32)
+        audio_batch = np.array(audio_batch, dtype=np.float32)
         seq_lengths = np.array([len(s) for s in tokens_batch])
         tokens_batch = np.array(
             [np.pad(t, (0, self.yoho_config.max_text_len - len(t))) for t in tokens_batch],
             dtype=np.uint64,
         )
-        return spectograms_batch, tokens_batch, seq_lengths
+        return audio_batch, tokens_batch, seq_lengths
 
 
 if __name__ == "__main__":
+    import time
+    import os
+
     from yoho.src.preprocessing.tokenizer import load_tokenizer
 
     tokenizer = load_tokenizer("./weights/vocab.txt", YOHOConfig())
-    import time
+
+    BATCH_SIZE = 16
+    NUM_WORKERS = os.cpu_count()
+    MODEL_DELAY = 2
 
     st = time.monotonic()
     dataloader = TranscriptionDataloader(
         YOHOConfig(),
         tokenizer,
-        4,
+        BATCH_SIZE,
         use_multiprocessing=True,
         shuffle=True,
-        max_queued_batches=12,
-        num_workers=12,
+        max_queued_batches=NUM_WORKERS,
+        num_workers=NUM_WORKERS,
     )
-    spectograms, tokens, lengths = dataloader.get_prepared_batch()
     et = time.monotonic()
-    print(spectograms.shape)
-    print(tokens.shape)
-    print(lengths.shape)
-    print(f"Time to prepare 12 batches: {et-st:.02f}s")
+    print(f"{NUM_WORKERS} threads prepared {NUM_WORKERS} batches in {et-st:.02f} seconds")
+
+    while True:
+        st = time.monotonic()
+        spectograms, tokens, lengths = dataloader.get_prepared_batch()
+        et = time.monotonic()
+        print(
+            f"Batch was loaded in {et-st:.02f} seconds. Queue {dataloader.num_prepared_batches}/{dataloader.max_queued_batches}"
+        )
+        time.sleep(MODEL_DELAY)

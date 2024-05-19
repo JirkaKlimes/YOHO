@@ -70,7 +70,7 @@ class Dataloader(ABC):
     def get_prepared_batch(self):
         if not self.use_multiprocessing:
             batch = self.get_batch(self.current_batch_idx)
-            self.current_batch_idx = (self.current_batch_idx + 1) % self.num_batches
+            self.current_batch_idx = int((self.current_batch_idx + 1) % self.num_batches)
             return batch
 
         if self.num_prepared_batches == 0:
@@ -78,8 +78,10 @@ class Dataloader(ABC):
                 f"Batches aren't preparing fast enough. Consider optimizing `{self.__class__.__name__}.{self.get_batch.__name__}` method"
             )
         batch = self._batch_queue.get()
-        self._task_queues[self.current_batch_idx % self.num_workers].put(self.current_batch_idx)
-        self.current_batch_idx = (self.current_batch_idx + 1) % self.num_batches
+        self._task_queues[int(self.current_batch_idx % self.num_workers)].put(
+            self.current_batch_idx
+        )
+        self.current_batch_idx = int((self.current_batch_idx + 1) % self.num_batches)
         return batch
 
     def terminate(self):
