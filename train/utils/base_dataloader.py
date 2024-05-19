@@ -56,7 +56,7 @@ class Dataloader(ABC):
     def start_workers(self):
         for _ in range(self.max_queued_batches):
             self._task_queues[self.current_batch_idx % self.num_workers].put(self.current_batch_idx)
-            self.current_batch_idx = (self.current_batch_idx + 1) % self.num_batches
+            self.current_batch_idx = int((self.current_batch_idx + 1) % self.num_batches)
 
         self._workers = [
             mp.Process(target=self._worker, args=(i,), daemon=True) for i in range(self.num_workers)
