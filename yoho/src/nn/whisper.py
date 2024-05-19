@@ -246,7 +246,7 @@ if __name__ == "__main__":
 
     variables = {"params": params}
 
-    audio = load_audio(Path("/home/jirka/Downloads/ted_interview.mp3"), SAMPLE_RATE)
+    audio = load_audio(Path("/home/jirka/Downloads/ted_interview.mp3"), SAMPLE_RATE) / 32768.0
 
     if audio.shape[0] > N_SAMPLES:
         audio = audio[:N_SAMPLES]
