@@ -36,6 +36,10 @@ class Dataloader(ABC):
     def get_batch(self, idx: int) -> Any:
         """Return batch at specified index"""
 
+    def on_epoch(self):
+        """Executes when last batch was used"""
+        pass
+
     @property
     def num_batches(self) -> int:
         return self.get_num_batches()
@@ -71,6 +75,8 @@ class Dataloader(ABC):
         if not self.use_multiprocessing:
             batch = self.get_batch(self.current_batch_idx)
             self.current_batch_idx = int((self.current_batch_idx + 1) % self.num_batches)
+            if self.current_batch_idx == 0:
+                self.on_epoch()
             return batch
 
         if self.num_prepared_batches == 0:
@@ -82,6 +88,8 @@ class Dataloader(ABC):
             self.current_batch_idx
         )
         self.current_batch_idx = int((self.current_batch_idx + 1) % self.num_batches)
+        if self.current_batch_idx == 0:
+            self.on_epoch()
         return batch
 
     def terminate(self):
