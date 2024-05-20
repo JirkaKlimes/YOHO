@@ -3,7 +3,6 @@ import jax.numpy as jnp
 from flax.training.train_state import TrainState
 import optax
 
-from yoho.src.config import YOHOConfig
 from yoho.src.nn.model import Model
 from yoho.src.preprocessing.tokenizer import load_tokenizer
 from yoho.src.preprocessing.audio import mel_spectogram
@@ -17,26 +16,25 @@ if __name__ == "__main__":
 
     HYPERPARAMETERS = CONFIG.hyperparameters.transcribe_pretrain
 
-    config = YOHOConfig()
-    tokenizer = load_tokenizer(CONFIG.weights.vocab, config)
+    tokenizer = load_tokenizer(CONFIG.weights.tokenizer, CONFIG.yoho)
 
-    model = Model(config, len(tokenizer.vocab) + len(tokenizer.special_tokens))
+    model = Model(CONFIG.yoho, len(tokenizer.vocab) + len(tokenizer.special_tokens))
 
     @jax.jit
     @jax.vmap
     def batched_mel_spectogram(audio):
         spectogram = mel_spectogram(
             audio,
-            config.n_fft,
-            config.stft_hop,
-            config.sample_rate,
-            config.n_mel_bands,
+            CONFIG.yoho.n_fft,
+            CONFIG.yoho.stft_hop,
+            CONFIG.yoho.sample_rate,
+            CONFIG.yoho.n_mel_bands,
             htk=True,
         )
         return spectogram
 
     dataloader = TranscriptionDataloader(
-        config,
+        CONFIG.yoho,
         tokenizer,
         HYPERPARAMETERS.batch_size,
         shuffle=True,
@@ -57,9 +55,12 @@ if __name__ == "__main__":
         loss_mask = jnp.astype(loss_mask, jnp.uint8)
         return spectogram, tokens, loss_mask
 
-    dummy_tokens = jnp.empty((HYPERPARAMETERS.batch_size, config.max_text_len), dtype=jnp.uint32)
+    dummy_tokens = jnp.empty(
+        (HYPERPARAMETERS.batch_size, CONFIG.yoho.max_text_len), dtype=jnp.uint32
+    )
     dummy_spectogram = jnp.empty(
-        (HYPERPARAMETERS.batch_size, config.max_audio_len, config.n_mel_bands), dtype=jnp.uint32
+        (HYPERPARAMETERS.batch_size, CONFIG.yoho.max_audio_len, CONFIG.yoho.n_mel_bands),
+        dtype=jnp.uint32,
     )
     variables = model.init(jax.random.PRNGKey(0), dummy_tokens, dummy_spectogram)
 

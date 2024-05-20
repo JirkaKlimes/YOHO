@@ -1,5 +1,18 @@
 language_whitelist = ['cs']
 
+[yoho]
+sample_rate = 16000
+n_mel_bands = 128
+n_fft = 400
+stft_hop = 160
+max_audio_len = 1024
+max_text_len = 256
+dims = 384
+n_audio_heads = 6
+n_audio_blocks = 4
+n_text_heads = 6
+n_text_blocks = 4
+
 [dataset]
 noisy = '/home/jirka/asr_dataset/noisy'
 clean = '/home/jirka/asr_dataset/clean'
@@ -9,7 +22,7 @@ speakers = '/home/jirka/asr_dataset/speakers'
 
 
 [weights]
-vocab = './weights/vocab.txt'
+tokenizer = './weights/tokenizer.model'
 asr = './weights/asr.safetensors'
 voice_reconstruction = './weights/voice_reconstruction.safetensors'
 voiceprint = './weights/voiceprint.safetensors'
@@ -17,7 +30,7 @@ yoho = './weights/yoho.safetensors'
 
 [hyperparameters.tokenizer]
 max_token_length = 32
-vocab_size = 32000
+vocab_size = 16000
 
 [hyperparameters.transcribe_pretrain]
 learning_rate = 0.003

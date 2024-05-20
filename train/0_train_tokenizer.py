@@ -1,12 +1,12 @@
-import base64
-from bpeasy.tokenizer import train_bpe, _DEFAULT_REGEX_PATTERN
 import srt
+import sentencepiece as spm
+import io
 from eld import LanguageDetector
 
 from yoho.src.preprocessing.tokenizer import load_tokenizer
-from yoho.src.config import YOHOConfig
+
 from train.utils.config import CONFIG
-from train.utils.standardize_text import standardize
+from train.utils.standardize_text import standardize_text
 
 
 def load_transcripts():
@@ -24,25 +24,28 @@ def load_transcripts():
         if lang not in CONFIG.language_whitelist:
             continue
         for utterance in utterances:
-            yield standardize(utterance, lang)
+            yield standardize_text(utterance, lang)
 
 
-vocab = train_bpe(
-    load_transcripts(),
-    python_regex=_DEFAULT_REGEX_PATTERN,
-    max_token_length=CONFIG.hyperparameters.tokenizer.max_token_length,
+special_tokens = [
+    "<|startoftranscript|>",
+    "<|endoftranscript|>",
+    "<|voiceprint|>",
+    *[f"<|t-{i}|>" for i in range(CONFIG.yoho.max_audio_len)],
+]
+
+model = io.BytesIO()
+spm.SentencePieceTrainer.Train(
+    sentence_iterator=load_transcripts(),
+    model_writer=model,
     vocab_size=CONFIG.hyperparameters.tokenizer.vocab_size,
+    user_defined_symbols=special_tokens,
 )
+with open(CONFIG.weights.tokenizer, "wb") as f:
+    f.write(model.getvalue())
 
-mappings = sorted(vocab.items(), key=lambda p: p[1])
-tokens = [base64.b64encode(m[0]).decode() + "\n" for m in mappings]
 
-VOCAB_PATH = CONFIG.weights.vocab
-with open(VOCAB_PATH, "w", encoding="ascii") as f:
-    f.writelines(tokens)
-
-config = YOHOConfig()
-tokenizer = load_tokenizer(VOCAB_PATH, config)
+tokenizer = load_tokenizer(CONFIG.weights.tokenizer)
 
 encoded = tokenizer.encode("Ahoj, světe!")
 print(f"Encoded: {encoded}")

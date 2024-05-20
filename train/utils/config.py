@@ -3,6 +3,8 @@ from pydantic import BaseModel
 from pathlib import Path
 import toml
 
+from yoho.src.config import YOHOConfig
+
 
 class Dataset(BaseModel):
     noisy: Path
@@ -42,7 +44,7 @@ class Hyperparameters(BaseModel):
 
 
 class Weights(BaseModel):
-    vocab: Path
+    tokenizer: Path
     asr: Path
     voice_reconstruction: Path
     voiceprint: Path
@@ -50,6 +52,7 @@ class Weights(BaseModel):
 
 
 class Config(BaseModel):
+    yoho: YOHOConfig
     dataset: Dataset
     hyperparameters: Hyperparameters
     weights: Weights

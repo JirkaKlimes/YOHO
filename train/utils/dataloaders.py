@@ -10,7 +10,7 @@ from yoho.src.preprocessing.audio import load_audio
 from yoho.src.preprocessing.tokenizer import BPEasyTokenizer
 
 from train.utils.base_dataloader import Dataloader
-from train.utils.standardize_text import standardize
+from train.utils.standardize_text import standardize_text
 from train.utils.config import CONFIG
 
 
@@ -127,7 +127,7 @@ class TranscriptionDataloader(Dataloader):
                     np.floor((ut.start - start_time).total_seconds() * self.yoho_config.sample_rate)
                 ),
                 int(np.ceil((ut.end - start_time).total_seconds() * self.yoho_config.sample_rate)),
-                standardize(ut.content, lang=lang),
+                standardize_text(ut.content, lang=lang),
             )
             for ut in utterances
         ]

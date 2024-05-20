@@ -1,8 +1,7 @@
-from dataclasses import dataclass
+from pydantic import BaseModel
 
 
-@dataclass
-class YOHOConfig:
+class YOHOConfig(BaseModel):
     sample_rate: int = 16000
     n_mel_bands: int = 128
     n_fft: int = 400

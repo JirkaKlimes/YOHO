@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from yoho.src.preprocessing.mel_spectogram import generate_mel_filters
+from yoho.src.preprocessing.mel_filterbanks import mel_filter_banks
 
 
 def load_audio(path: Path, sample_rate: int):
@@ -28,12 +28,10 @@ def save_audio(audio: np.ndarray, path: Path, sample_rate: int):
     process.wait()
 
 
-def mel_spectogram(
-    audio, n_fft: int, hop_len: int, sample_rate: int, n_mels: int, htk: bool = False
-):
+def mel_spectogram(audio, n_fft: int, hop_len: int, sample_rate: int, n_mels: int):
     stft = jax.scipy.signal.stft(audio, nperseg=n_fft, noverlap=n_fft - hop_len, boundary=None)[-1]
     magnitudes = jnp.abs(stft) ** 2
-    filters = generate_mel_filters(sample_rate, n_fft, n_mels, htk)
+    filters = mel_filter_banks(sample_rate, n_fft, n_mels)
     spectogram = filters @ magnitudes
     return spectogram.T
 

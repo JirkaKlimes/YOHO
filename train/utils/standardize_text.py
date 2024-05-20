@@ -3,7 +3,7 @@ from typing import Optional
 from num2words import num2words
 
 
-def standardize(text: str, lang: Optional[str] = None) -> Optional[str]:
+def standardize_text(text: str, lang: Optional[str] = None) -> Optional[str]:
     # num2words doesn't use ISO-639 codes
     corrections = {
         "be": "be",
@@ -32,5 +32,5 @@ def standardize(text: str, lang: Optional[str] = None) -> Optional[str]:
 
 if __name__ == "__main__":
     text = "Nějaký 3.3   divý kus 124,512 textu (remove this), [same here] 2 + 2 = 4."
-    standardized = standardize(text, lang="cs")
+    standardized = standardize_text(text, lang="cs")
     print(standardized)
