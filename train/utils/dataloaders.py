@@ -5,20 +5,19 @@ import numpy as np
 import bisect
 import datetime as dt
 
-from yoho.src.config import YOHOConfig
 from yoho.src.preprocessing.audio import load_audio
-from yoho.src.preprocessing.tokenizer import BPEasyTokenizer
+import sentencepiece as spm
 
 from train.utils.base_dataloader import Dataloader
 from train.utils.standardize_text import standardize_text
-from train.utils.config import CONFIG
+from train.utils.config import Config
 
 
 class TranscriptionDataloader(Dataloader):
     def __init__(
         self,
-        yoho_config: YOHOConfig,
-        tokenizer: BPEasyTokenizer,
+        config: Config,
+        tokenizer: spm.SentencePieceProcessor,
         batch_size: int,
         shuffle: bool = True,
         max_queued_batches: int = 8,
@@ -27,13 +26,13 @@ class TranscriptionDataloader(Dataloader):
         use_multiprocessing: bool = True,
         disable_warnings: bool = False,
     ):
-        self.yoho_config = yoho_config
+        self.config = config
         self.tokenizer = tokenizer
         self.shuffle = shuffle
 
         language_detector = LanguageDetector()
 
-        self.root_path = CONFIG.dataset.noisy
+        self.root_path = self.config.dataset.noisy
         all_paths = self.root_path.joinpath("transcripts").iterdir()
         sizes = []
         paths = []
@@ -44,7 +43,7 @@ class TranscriptionDataloader(Dataloader):
             transcript = list(srt.parse(data))
             content = "\n".join([utterance.content for utterance in transcript])
             lang = language_detector.detect(content).language
-            if lang not in CONFIG.language_whitelist:
+            if lang not in self.config.language_whitelist:
                 continue
             sizes.append(len(transcript))
             paths.append((path, self.root_path.joinpath("audio", path.with_suffix(".mp3").name)))
@@ -74,13 +73,13 @@ class TranscriptionDataloader(Dataloader):
         duration = (end_speech_time - start_speech_time).total_seconds()
         padding_left = (start_speech_time - start_time).total_seconds()
         padding_left = np.random.uniform(
-            0, min(padding_left, self.yoho_config.max_input_seconds - duration)
+            0, min(padding_left, self.config.yoho.max_input_seconds - duration)
         )
         start_time = start_speech_time - dt.timedelta(seconds=padding_left)
         duration = (end_speech_time - start_time).total_seconds()
         padding_right = (end_time - end_speech_time).total_seconds()
         padding_right = np.random.uniform(
-            0, min(padding_right, self.yoho_config.max_input_seconds - duration)
+            0, min(padding_right, self.config.yoho.max_input_seconds - duration)
         )
         end_time = end_speech_time + dt.timedelta(seconds=padding_right)
         return start_time, end_time
@@ -97,14 +96,14 @@ class TranscriptionDataloader(Dataloader):
                 break
             if (
                 not (transcript[si + 1].end - start_speech_time).total_seconds()
-                < self.yoho_config.max_input_seconds
+                < self.config.yoho.max_input_seconds
             ):
                 break
             si += 1
             utterances.append(transcript[si])
         end_speech_time = transcript[si].end
         end_time = (
-            dt.timedelta(seconds=len(audio) / self.yoho_config.sample_rate)
+            dt.timedelta(seconds=len(audio) / self.config.yoho.sample_rate)
             if si >= len(transcript) - 2
             else transcript[si + 1].start
         )
@@ -112,21 +111,21 @@ class TranscriptionDataloader(Dataloader):
         start_time, end_time = self.randomize_padding(
             start_time, end_time, start_speech_time, end_speech_time
         )
-        from_sample = int(np.ceil(start_time.total_seconds() * self.yoho_config.sample_rate))
-        to_sample = int(np.floor(end_time.total_seconds() * self.yoho_config.sample_rate))
+        from_sample = int(np.ceil(start_time.total_seconds() * self.config.yoho.sample_rate))
+        to_sample = int(np.floor(end_time.total_seconds() * self.config.yoho.sample_rate))
         audio = audio[from_sample:to_sample]
 
-        if len(audio) > self.yoho_config.n_samples:
+        if len(audio) > self.config.yoho.n_samples:
             return None, None
 
-        audio = np.pad(audio, (0, self.yoho_config.n_samples - len(audio)))
+        audio = np.pad(audio, (0, self.config.yoho.n_samples - len(audio)))
 
         utterances_relative = [
             (
                 int(
-                    np.floor((ut.start - start_time).total_seconds() * self.yoho_config.sample_rate)
+                    np.floor((ut.start - start_time).total_seconds() * self.config.yoho.sample_rate)
                 ),
-                int(np.ceil((ut.end - start_time).total_seconds() * self.yoho_config.sample_rate)),
+                int(np.ceil((ut.end - start_time).total_seconds() * self.config.yoho.sample_rate)),
                 standardize_text(ut.content, lang=lang),
             )
             for ut in utterances
@@ -151,7 +150,7 @@ class TranscriptionDataloader(Dataloader):
                 with open(transcript_path, encoding="utf-8") as f:
                     data = f.read()
                 transcript = list(srt.parse(data))
-                audio = load_audio(audio_path, self.yoho_config.sample_rate)
+                audio = load_audio(audio_path, self.config.yoho.sample_rate)
 
                 relative_sample_idx = int(
                     sample_idx - (0 if asset_index == 0 else self.sizes[asset_index - 1])
@@ -174,20 +173,20 @@ class TranscriptionDataloader(Dataloader):
             for start, end, content in utterances:
                 start = int(
                     min(
-                        np.floor(start / self.yoho_config.stft_hop),
-                        self.yoho_config.max_audio_len - 1,
+                        np.floor(start / self.config.yoho.stft_hop),
+                        self.config.yoho.max_audio_len - 1,
                     )
                 )
                 end = int(
                     min(
-                        np.floor(end / self.yoho_config.stft_hop),
-                        self.yoho_config.max_audio_len - 1,
+                        np.floor(end / self.config.yoho.stft_hop),
+                        self.config.yoho.max_audio_len - 1,
                     )
                 )
                 content = f"<|t-{start}|>{content}<|t-{end}|><|voiceprint|>"
                 transcript += content
             transcript += "<|endoftranscript|>"
-            tokens = self.tokenizer.encode(transcript, allowed_special="all")
+            tokens = self.tokenizer.encode(transcript)
             audio_batch.append(audio)
             tokens_batch.append(tokens)
 
@@ -195,18 +194,18 @@ class TranscriptionDataloader(Dataloader):
         seq_lengths = np.array([len(s) for s in tokens_batch])
         tokens_batch = np.array(
             [
-                t[: self.yoho_config.max_text_len]
-                if len(t) > self.yoho_config.max_text_len
-                else np.pad(t, (0, self.yoho_config.max_text_len - len(t)))
+                t[: self.config.yoho.max_text_len]
+                if len(t) > self.config.yoho.max_text_len
+                else np.pad(t, (0, self.config.yoho.max_text_len - len(t)))
                 for t in tokens_batch
             ],
             dtype=np.uint64,
         )
-        loss_mask = np.zeros((self.batch_size, self.yoho_config.max_text_len), np.uint8)
+        loss_mask = np.zeros((self.batch_size, self.config.yoho.max_text_len), np.uint8)
         for i, (length, tokens) in enumerate(zip(seq_lengths, tokens_batch)):
             loss_mask[i, : length - 1] = 1
             for j, tok in enumerate(tokens):
-                if tok == self.tokenizer.encode("<|voiceprint|>", allowed_special="all")[0]:
+                if tok == self.tokenizer.encode("<|voiceprint|>")[0]:
                     loss_mask[i, j - 1] = 0
 
         return audio_batch, tokens_batch, loss_mask
@@ -218,7 +217,7 @@ if __name__ == "__main__":
 
     from yoho.src.preprocessing.tokenizer import load_tokenizer
 
-    tokenizer = load_tokenizer("./weights/vocab.txt", YOHOConfig())
+    from train.utils.config import CONFIG
 
     BATCH_SIZE = 32
     NUM_WORKERS = os.cpu_count()
@@ -226,8 +225,8 @@ if __name__ == "__main__":
 
     st = time.monotonic()
     dataloader = TranscriptionDataloader(
-        YOHOConfig(),
-        tokenizer,
+        CONFIG,
+        load_tokenizer("./weights/tokenizer.model"),
         BATCH_SIZE,
         use_multiprocessing=True,
         shuffle=True,

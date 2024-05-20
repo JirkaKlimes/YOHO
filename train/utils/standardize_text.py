@@ -3,10 +3,9 @@ from typing import Optional
 from num2words import num2words
 
 
-def standardize_text(text: str, lang: Optional[str] = None) -> Optional[str]:
+def standardize_text(text: str, lang: str) -> Optional[str]:
     # num2words doesn't use ISO-639 codes
     corrections = {
-        "be": "be",
         "cs": "cz",
         "da": "dk",
         "tgk": "tg",
