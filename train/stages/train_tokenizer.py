@@ -5,11 +5,11 @@ from eld import LanguageDetector
 
 from yoho.src.preprocessing.tokenizer import load_tokenizer
 
-from train.utils.config import Config
+from train.utils.config import SessionConfig
 from train.utils.standardize_text import standardize_text
 
 
-def load_transcripts(config: Config):
+def load_transcripts(config: SessionConfig):
     paths = [
         *config.dataset.noisy.joinpath("./transcripts").iterdir(),
         *config.dataset.clean.joinpath("./transcripts").iterdir(),
@@ -27,7 +27,7 @@ def load_transcripts(config: Config):
             yield standardize_text(utterance, lang)
 
 
-def generate_special_tokens(config: Config):
+def generate_special_tokens(config: SessionConfig):
     special_tokens = [
         "<|startoftranscript|>",
         "<|endoftranscript|>",
@@ -37,7 +37,7 @@ def generate_special_tokens(config: Config):
     return special_tokens
 
 
-def train_model(config: Config):
+def train_model(config: SessionConfig):
     model = io.BytesIO()
 
     data = load_transcripts(config)
@@ -53,12 +53,10 @@ def train_model(config: Config):
         f.write(model.getvalue())
 
 
-if __name__ == "__main__":
-    from train.utils.config import CONFIG
+def main(config):
+    train_model(config)
 
-    train_model(CONFIG)
-
-    tokenizer = load_tokenizer(CONFIG.weights.tokenizer)
+    tokenizer = load_tokenizer(config.weights.tokenizer)
 
     encoded = tokenizer.encode("Ahoj, světe!")
 

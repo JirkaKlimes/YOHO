@@ -1,7 +1,6 @@
 from typing import List
 from pydantic import BaseModel
 from pathlib import Path
-import toml
 
 from yoho.src.config import YOHOConfig
 
@@ -22,6 +21,7 @@ class Tokenizer(BaseModel):
 class Training(BaseModel):
     learning_rate: float
     batch_size: int
+    accumulated_batches: int
     updates: int
 
 
@@ -51,15 +51,14 @@ class Weights(BaseModel):
     yoho: Path
 
 
-class Config(BaseModel):
+class SessionConfig(BaseModel):
+    name: str
     yoho: YOHOConfig
     dataset: Dataset
     hyperparameters: Hyperparameters
     weights: Weights
     language_whitelist: List[str]
 
-
-with open("./train/config.toml") as f:
-    data = toml.load(f)
-
-CONFIG = Config(**data)
+    @property
+    def path(self):
+        return Path("./sessions").joinpath(self.name)

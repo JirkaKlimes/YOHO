@@ -23,10 +23,10 @@ speakers = '/home/jirka/asr_dataset/speakers'
 
 [weights]
 tokenizer = './weights/tokenizer.model'
-asr = './weights/asr.safetensors'
-voice_reconstruction = './weights/voice_reconstruction.safetensors'
-voiceprint = './weights/voiceprint.safetensors'
-yoho = './weights/yoho.safetensors'
+asr = './weights/asr.pkl'
+voice_reconstruction = './weights/voice_reconstruction.pkl'
+voiceprint = './weights/voiceprint.pkl'
+yoho = './weights/yoho.pkl'
 
 [hyperparameters.tokenizer]
 max_token_length = 32
@@ -35,21 +35,25 @@ vocab_size = 16000
 [hyperparameters.transcribe_pretrain]
 learning_rate = 0.003
 batch_size = 16
+accumulated_batches = 16
 updates = 250000
 speechless_sample_ratio = 0.1
 
 [hyperparameters.reconstruct_pretrain]
 learning_rate = 0.003
-batch_size = 64
+batch_size = 16
+accumulated_batches = 16
 updates = 250000
 
 [hyperparameters.voiceprint_finetune]
 learning_rate = 0.003
-batch_size = 128
+batch_size = 16
+accumulated_batches = 16
 updates = 100000
 
 [hyperparameters.transcribe_finetune]
 learning_rate = 0.003
-batch_size = 64
+batch_size = 16
+accumulated_batches = 16
 updates = 250000
 speechless_sample_ratio = 0.1

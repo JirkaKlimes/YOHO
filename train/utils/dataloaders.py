@@ -10,13 +10,13 @@ import sentencepiece as spm
 
 from train.utils.base_dataloader import Dataloader
 from train.utils.standardize_text import standardize_text
-from train.utils.config import Config
+from train.utils.config import SessionConfig
 
 
 class TranscriptionDataloader(Dataloader):
     def __init__(
         self,
-        config: Config,
+        config: SessionConfig,
         tokenizer: spm.SentencePieceProcessor,
         batch_size: int,
         shuffle: bool = True,
