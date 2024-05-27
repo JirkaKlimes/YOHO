@@ -108,8 +108,8 @@ def main(config: SessionConfig):
     grad_fn = jax.value_and_grad(loss_fn)
 
     @jax.jit
-    def train_step(state, batch):
-        loss, grads = grad_fn(state.params, *batch)
+    def train_step(state, spectogram, tokens, loss_mask):
+        loss, grads = grad_fn(state.params, spectogram, tokens, loss_mask)
         state = state.apply_gradients(grads=grads)
         return state, loss
 
