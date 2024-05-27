@@ -4,6 +4,7 @@ import jax
 import jax.numpy as jnp
 from flax.training.train_state import TrainState
 import optax
+from tqdm import tqdm
 
 from yoho.src.nn.model import Model
 from yoho.src.preprocessing.tokenizer import load_tokenizer
@@ -112,18 +113,26 @@ def main(config: SessionConfig):
         state = state.apply_gradients(grads=grads)
         return state, loss
 
-    losses = []
+    state, loss = train_step(state, *get_batch())
 
+    losses = []
+    pbar = tqdm(
+        initial=int(state.step // HYPERPARAMETERS.accumulated_batches),
+        total=HYPERPARAMETERS.updates,
+    )
     while state.step < HYPERPARAMETERS.updates * HYPERPARAMETERS.accumulated_batches:
-        update_step = state.step // HYPERPARAMETERS.accumulated_batches
         accumulation_step = state.step % HYPERPARAMETERS.accumulated_batches
 
-        batch = get_batch()
-        state, loss = train_step(state, batch)
+        spectogram, tokens, loss_mask = get_batch()
+        state, loss = train_step(state, spectogram, tokens, loss_mask)
         losses.append(loss)
+        pbar.set_description_str(
+            f"Acc: {accumulation_step+1}/{HYPERPARAMETERS.accumulated_batches}"
+        )
 
         if accumulation_step == HYPERPARAMETERS.accumulated_batches - 1:
-            print(f"Step: {update_step} | Loss: {sum(losses) / len(losses):.05f}")
+            pbar.update()
+            pbar.set_postfix_str(f"Loss: {sum(losses) / len(losses):.05f}")
             losses = []
 
             def _save():
