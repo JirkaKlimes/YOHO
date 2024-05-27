@@ -53,7 +53,7 @@ def train_model(config: SessionConfig):
         f.write(model.getvalue())
 
 
-def main(config):
+def main(config: SessionConfig):
     train_model(config)
 
     tokenizer = load_tokenizer(config.weights.tokenizer)

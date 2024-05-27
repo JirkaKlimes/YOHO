@@ -1,15 +1,16 @@
 import pickle
+import threading
 import jax
 import jax.numpy as jnp
 from flax.training.train_state import TrainState
 import optax
-from tqdm import tqdm
 
 from yoho.src.nn.model import Model
 from yoho.src.preprocessing.tokenizer import load_tokenizer
 from yoho.src.preprocessing.audio import mel_spectogram, normalize_spectogram
 
 from train.utils.dataloaders import TranscriptionDataloader
+from train.utils.config import SessionConfig
 
 # TODO: save loss progress
 # TODO: reject very wrong samples, save to bitmap image for visualization
@@ -17,8 +18,11 @@ from train.utils.dataloaders import TranscriptionDataloader
 # TODO: generate validation samples every few steps
 
 
-def main(config):
+def main(config: SessionConfig):
     HYPERPARAMETERS = config.hyperparameters.transcribe_pretrain
+    STAGE_PATH = config.path.joinpath("stages", "1")
+    STAGE_PATH.mkdir(exist_ok=True)
+    CHECHPOINT_PATH = STAGE_PATH.joinpath("checkpoint.pkl")
 
     tokenizer = load_tokenizer(config.weights.tokenizer)
 
@@ -55,10 +59,20 @@ def main(config):
         loss_mask = jnp.astype(loss_mask, jnp.uint8)
         return spectogram, tokens, loss_mask
 
-    if config.weights.asr.exists():
-        with open(config.weights.asr, "rb") as f:
-            params = pickle.load(f)
-        variables = {"params": params}
+    if CHECHPOINT_PATH.exists():
+        with open(CHECHPOINT_PATH, "rb") as f:
+            step, params, opt_state = pickle.load(f)
+
+        state = TrainState(
+            step,
+            apply_fn=model.apply,
+            params=params,
+            tx=optax.MultiSteps(
+                optax.adamw(HYPERPARAMETERS.learning_rate),
+                HYPERPARAMETERS.accumulated_batches,
+            ),
+            opt_state=opt_state,
+        )
 
     else:
         dummy_tokens = jnp.empty(
@@ -68,20 +82,20 @@ def main(config):
             (HYPERPARAMETERS.batch_size, config.yoho.max_audio_len, config.yoho.n_mel_bands),
             dtype=jnp.uint32,
         )
-        # print(model.tabulate(jax.random.key(0), dummy_tokens, dummy_spectogram))
+        print(model.tabulate(jax.random.key(0), dummy_tokens, dummy_spectogram, compute_flops=True))
         variables = model.init(jax.random.PRNGKey(0), dummy_tokens, dummy_spectogram)
 
-        with open(config.weights.asr, "wb") as f:
-            pickle.dump(variables["params"], f)
+        state = TrainState.create(
+            apply_fn=model.apply,
+            params=variables["params"],
+            tx=optax.MultiSteps(
+                optax.adamw(HYPERPARAMETERS.learning_rate),
+                HYPERPARAMETERS.accumulated_batches,
+            ),
+        )
 
-    state = TrainState.create(
-        apply_fn=model.apply,
-        params=variables["params"],
-        tx=optax.MultiSteps(
-            optax.adamw(HYPERPARAMETERS.learning_rate),
-            HYPERPARAMETERS.accumulated_batches,
-        ),
-    )
+        with open(CHECHPOINT_PATH, "wb") as f:
+            pickle.dump((state.step, state.params, state.opt_state), f)
 
     def loss_fn(params, spectogram, tokens, loss_mask):
         logits = state.apply_fn({"params": params}, tokens, spectogram)
@@ -98,14 +112,22 @@ def main(config):
         state = state.apply_gradients(grads=grads)
         return state, loss
 
-    pbar = tqdm(range(HYPERPARAMETERS.updates))
-    for update in pbar:
-        losses = []
-        for accumulation_step in range(HYPERPARAMETERS.accumulated_batches):
-            batch = get_batch()
-            state, loss = train_step(state, batch)
-            losses.append(loss)
-        pbar.set_description_str(f"Loss: {sum(losses) / len(losses):.05f}")
+    losses = []
 
-        with open(config.weights.asr, "wb") as f:
-            pickle.dump(state.params, f)
+    while state.step < HYPERPARAMETERS.updates * HYPERPARAMETERS.accumulated_batches:
+        update_step = state.step // HYPERPARAMETERS.accumulated_batches
+        accumulation_step = state.step % HYPERPARAMETERS.accumulated_batches
+
+        batch = get_batch()
+        state, loss = train_step(state, batch)
+        losses.append(loss)
+
+        if accumulation_step == HYPERPARAMETERS.accumulated_batches - 1:
+            print(f"Step: {update_step} | Loss: {sum(losses) / len(losses):.05f}")
+            losses = []
+
+            def _save():
+                with open(CHECHPOINT_PATH, "wb") as f:
+                    pickle.dump((state.step, state.params, state.opt_state), f)
+
+            threading.Thread(target=_save).start()

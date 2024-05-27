@@ -17,5 +17,5 @@ if path.exists():
 path.mkdir(parents=True)
 shutil.copy(Path("./train/config.toml"), path)
 
-for name in ["weights"]:
+for name in ["weights", "stages"]:
     path.joinpath(name).mkdir()
