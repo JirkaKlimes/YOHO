@@ -21,7 +21,7 @@ def load_audio(path: Path, sample_rate: int):
 def save_audio(audio: np.ndarray, path: Path, sample_rate: int):
     process = (
         ffmpeg.input("pipe:0", format="s16le", acodec="pcm_s16le", ac=1, ar=sample_rate)
-        .output(str(path.with_suffix(".mp3")), format="mp3", audio_bitrate="16k")
+        .output(str(path.with_suffix(".mp4")), format="mp4", audio_bitrate="16k")
         .run_async(pipe_stdin=True, quiet=True)
     )
     process.stdin.write(audio.tobytes())
