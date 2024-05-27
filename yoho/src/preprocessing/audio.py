@@ -5,6 +5,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from yoho.src.preprocessing.mel_filterbanks import mel_filter_banks
+from yoho.src.config import YOHOConfig
 
 
 def load_audio(path: Path, sample_rate: int):
@@ -36,8 +37,16 @@ def mel_spectogram(audio, n_fft: int, hop_len: int, sample_rate: int, n_mels: in
     return spectogram.T
 
 
-def normalize_spectogram(spectogram):
-    normalized = jnp.log10(jnp.clip(spectogram, a_min=1e-10))
-    normalized = jnp.maximum(normalized, normalized.max() - 8.0)
-    normalized = (normalized + 4.0) / 4.0
-    return normalized
+def get_batched_spectogram(config: YOHOConfig):
+    @jax.jit
+    @jax.vmap
+    def func(audio):
+        return mel_spectogram(
+            audio,
+            config.n_fft,
+            config.stft_hop,
+            config.sample_rate,
+            config.n_mel_bands,
+        )
+
+    return func

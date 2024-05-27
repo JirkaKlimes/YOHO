@@ -1,4 +1,5 @@
 import argparse
+import os
 from pathlib import Path
 import toml
 
@@ -43,6 +44,10 @@ for attribute in config.weights.__annotations__.keys():
     current_path = getattr(config.weights, attribute)
     new_path = config.path.joinpath(current_path)
     setattr(config.weights, attribute, new_path)
+
+if config.hardware.devices != "all":
+    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, config.devices))
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = str(config.hardware.allowed_mem_fraction)
 
 
 match args.stage:

@@ -3,12 +3,15 @@ import threading
 import jax
 import jax.numpy as jnp
 from flax.training.train_state import TrainState
+from flax.training import common_utils
+from flax import jax_utils
 import optax
 from tqdm import tqdm
+import os
 
 from yoho.src.nn.model import Model
 from yoho.src.preprocessing.tokenizer import load_tokenizer
-from yoho.src.preprocessing.audio import mel_spectogram, normalize_spectogram
+from yoho.src.preprocessing.audio import get_batched_spectogram
 
 from train.utils.dataloaders import TranscriptionDataloader
 from train.utils.config import SessionConfig
@@ -29,35 +32,25 @@ def main(config: SessionConfig):
 
     model = Model(config.yoho, tokenizer.vocab_size())
 
-    @jax.jit
-    @jax.vmap
-    def batched_mel_spectogram(audio):
-        spectogram = mel_spectogram(
-            audio,
-            config.yoho.n_fft,
-            config.yoho.stft_hop,
-            config.yoho.sample_rate,
-            config.yoho.n_mel_bands,
-        )
-        return spectogram
-
     dataloader = TranscriptionDataloader(
         config,
         tokenizer,
         HYPERPARAMETERS.batch_size,
         shuffle=True,
-        max_queued_batches=8,
-        num_workers=8,
-        disable_warnings=True,
+        max_queued_batches=os.cpu_count(),
+        num_workers=os.cpu_count(),
     )
+
+    batched_spectogram = get_batched_spectogram(config.yoho)
 
     def get_batch():
         audio, tokens, loss_mask = dataloader.get_prepared_batch()
-        spectogram = batched_mel_spectogram(audio / 32768.0)
+        normalized_audio = audio / 32768.0
+        spectogram = batched_spectogram(normalized_audio)
         spectogram = jnp.astype(spectogram, jnp.float32)
-        spectogram = normalize_spectogram(spectogram)
         tokens = jnp.astype(tokens, jnp.uint32)
         loss_mask = jnp.astype(loss_mask, jnp.uint8)
+        # TODO: normalize spectogram
         return spectogram, tokens, loss_mask
 
     if CHECHPOINT_PATH.exists():
@@ -98,22 +91,22 @@ def main(config: SessionConfig):
         with open(CHECHPOINT_PATH, "wb") as f:
             pickle.dump((state.step, state.params, state.opt_state), f)
 
-    def loss_fn(params, spectogram, tokens, loss_mask):
-        logits = state.apply_fn({"params": params}, tokens, spectogram)
-        loss = optax.softmax_cross_entropy_with_integer_labels(logits[:, :-1], tokens[:, 1:])
-        loss *= loss_mask[:, :-1]
-        loss = jnp.mean(loss)
-        return loss
-
-    grad_fn = jax.value_and_grad(loss_fn)
-
-    @jax.jit
     def train_step(state, spectogram, tokens, loss_mask):
+        def loss_fn(params, spectogram, tokens, loss_mask):
+            logits = state.apply_fn({"params": params}, tokens, spectogram)
+            loss = optax.softmax_cross_entropy_with_integer_labels(logits[:, :-1], tokens[:, 1:])
+            loss *= loss_mask[:, :-1]
+            loss = jnp.mean(loss)
+            return loss
+
+        grad_fn = jax.value_and_grad(loss_fn)
         loss, grads = grad_fn(state.params, spectogram, tokens, loss_mask)
+        grads = jax.lax.pmean(grads, axis_name="devices")
         state = state.apply_gradients(grads=grads)
         return state, loss
 
-    state, loss = train_step(state, *get_batch())
+    train_step = jax.pmap(train_step, axis_name="devices", donate_argnums=(0,))
+    device_states = jax_utils.replicate(state)
 
     losses = []
     pbar = tqdm(
@@ -123,8 +116,13 @@ def main(config: SessionConfig):
     while state.step < HYPERPARAMETERS.updates * HYPERPARAMETERS.accumulated_batches:
         accumulation_step = state.step % HYPERPARAMETERS.accumulated_batches
 
-        spectogram, tokens, loss_mask = get_batch()
-        state, loss = train_step(state, spectogram, tokens, loss_mask)
+        spectogram, tokens, loss_mask = list(map(common_utils.shard, get_batch()))
+
+        device_states, loss = train_step(device_states, spectogram, tokens, loss_mask)
+        loss = jnp.mean(loss)
+
+        state = jax_utils.unreplicate(device_states)
+
         losses.append(loss)
         pbar.set_description_str(
             f"Acc: {accumulation_step+1}/{HYPERPARAMETERS.accumulated_batches}"
@@ -135,8 +133,17 @@ def main(config: SessionConfig):
             pbar.set_postfix_str(f"Loss: {sum(losses) / len(losses):.05f}")
             losses = []
 
+            host_state = jax.device_get(state)
+
             def _save():
                 with open(CHECHPOINT_PATH, "wb") as f:
-                    pickle.dump((state.step, state.params, state.opt_state), f)
+                    pickle.dump(
+                        (
+                            host_state.step,
+                            host_state.params,
+                            host_state.opt_state,
+                        ),
+                        f,
+                    )
 
             threading.Thread(target=_save).start()

@@ -3,4 +3,5 @@ __pycache__/
 .vscode/
 weights/
 sessions/
+asr_dataset/
 notes.md

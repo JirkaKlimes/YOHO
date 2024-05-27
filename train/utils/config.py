@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Union
 from pydantic import BaseModel
 from pathlib import Path
 
@@ -51,6 +51,11 @@ class Weights(BaseModel):
     yoho: Path
 
 
+class Hardware(BaseModel):
+    devices: Union[List[int], str]
+    allowed_mem_fraction: float
+
+
 class SessionConfig(BaseModel):
     name: str
     yoho: YOHOConfig
@@ -58,6 +63,7 @@ class SessionConfig(BaseModel):
     hyperparameters: Hyperparameters
     weights: Weights
     language_whitelist: List[str]
+    hardware: Hardware
 
     @property
     def path(self):
