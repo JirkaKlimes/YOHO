@@ -7,10 +7,17 @@ from yoho.src.preprocessing.audio import save_audio, load_audio
 
 
 class AudioSample:
-    def __init__(self, pcmdata: np.ndarray, sample_rate: int, transcript: Optional[str] = None):
-        self.pcmdata = pcmdata
+    def __init__(
+        self,
+        pcmdata: np.ndarray,
+        sample_rate: int,
+        transcript: Optional[str] = None,
+        path: Optional[Path] = None,
+    ):
+        self._pcmdata = pcmdata
         self.sample_rate = sample_rate
         self.transcript = transcript
+        self._path = path
 
     def save(self, path: Path):
         assert path.suffix == ".mp4", "Use `.mp4` since it's the fastest format"
@@ -26,9 +33,14 @@ class AudioSample:
     def load(cls, path: Path, sample_rate: int):
         assert path.suffix == ".mp4", "Can only load `.mp4` files"
         audio_file = MP4(path)
-        pcmdata = load_audio(path, sample_rate)
         transcript = audio_file.tags.get("\xa9cmt", [None])[0]
-        return cls(pcmdata, sample_rate, transcript)
+        return cls(None, sample_rate, transcript, path)
+
+    @property
+    def pcmdata(self) -> np.ndarray:
+        if self._pcmdata is None:
+            self._pcmdata = load_audio(path, sample_rate)
+        return self._pcmdata
 
 
 if __name__ == "__main__":

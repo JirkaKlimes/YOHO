@@ -4,9 +4,9 @@ from eld import LanguageDetector
 import numpy as np
 import bisect
 import datetime as dt
+import sentencepiece as spm
 
 from yoho.src.preprocessing.audio import load_audio
-import sentencepiece as spm
 
 from train.utils.base_dataloader import Dataloader
 from train.utils.standardize_text import standardize_text
