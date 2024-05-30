@@ -42,7 +42,7 @@ class AudioSample:
     @property
     def pcmdata(self) -> np.ndarray:
         if self._pcmdata is None:
-            self._pcmdata = load_audio(path, sample_rate)
+            self._pcmdata = load_audio(self._path, self.sample_rate)
         return self._pcmdata
 
     @property
