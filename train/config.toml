@@ -2,7 +2,7 @@ language_whitelist = ['cs']
 
 [hardware]
 devices = 'all'
-allowed_mem_fraction = 0.95
+allowed_mem_fraction = 0.90
 
 [yoho]
 sample_rate = 16000
