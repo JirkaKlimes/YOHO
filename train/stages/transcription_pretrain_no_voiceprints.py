@@ -118,6 +118,12 @@ class Trainer:
         # TODO: normalize spectogram
         return spectogram, tokens, loss_mask
 
+    def save_metrics(self, update: int, learning_rate: float, loss: float):
+        metrics = pd.DataFrame(
+            {"update": [update], "learning_rate": [learning_rate], "loss": [loss]}
+        )
+        metrics.to_csv(self.metrics_path, mode="a", header=False, index=False)
+
     def run(self):
         def train_step(state, spectogram, tokens, loss_mask):
             def loss_fn(params, spectogram, tokens, loss_mask):
@@ -163,23 +169,20 @@ class Trainer:
             )
 
             if accumulation_step == self.hyperparameters.accumulated_batches - 1:
-                batch_loss = acc_loss / self.hyperparameters.accumulated_batches
+                batch_loss = float(acc_loss / self.hyperparameters.accumulated_batches)
                 acc_loss = 0
 
-                metrics = pd.DataFrame(
-                    {
-                        "update": [
-                            int(self.state.step // self.hyperparameters.accumulated_batches)
-                        ],
-                        "learning_rate": [float(self.learning_rate_schedule(self.state.step))],
-                        "loss": [float(batch_loss)],
-                    }
-                )
-
-                metrics.to_csv(self.metrics_path, mode="a", header=False, index=False)
-
                 pbar.update()
-                pbar.set_postfix_str(f"Loss: {batch_loss}")
+                pbar.set_postfix_str(f"Loss: {batch_loss:.4e}")
+
+                threading.Thread(
+                    target=self.save_metrics,
+                    args=(
+                        int(self.state.step),
+                        float(self.learning_rate_schedule(self.state.step)),
+                        batch_loss,
+                    ),
+                ).start()
 
                 if step % self.hyperparameters.validation_frequency == 0:
                     host_state = jax.device_get(self.state)
