@@ -209,38 +209,3 @@ class TranscriptionDataloader(Dataloader):
                     loss_mask[i, j - 1] = 0
 
         return audio_batch, tokens_batch, loss_mask
-
-
-if __name__ == "__main__":
-    import time
-    import os
-
-    from yoho.src.preprocessing.tokenizer import load_tokenizer
-
-    from train.utils.config import CONFIG
-
-    BATCH_SIZE = 32
-    NUM_WORKERS = os.cpu_count()
-    MODEL_DELAY = 1
-
-    st = time.monotonic()
-    dataloader = TranscriptionDataloader(
-        CONFIG,
-        load_tokenizer("./weights/tokenizer.model"),
-        BATCH_SIZE,
-        use_multiprocessing=True,
-        shuffle=True,
-        max_queued_batches=NUM_WORKERS,
-        num_workers=NUM_WORKERS,
-    )
-    et = time.monotonic()
-    print(f"{NUM_WORKERS} threads prepared {NUM_WORKERS} batches in {et-st:.02f} seconds")
-
-    while True:
-        st = time.monotonic()
-        audio, tokens, lengths = dataloader.get_prepared_batch()
-        et = time.monotonic()
-        print(
-            f"Batch was loaded in {et-st:.02f} seconds. Queue {dataloader.num_prepared_batches}/{dataloader.max_queued_batches}"
-        )
-        time.sleep(MODEL_DELAY)
