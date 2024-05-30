@@ -110,8 +110,7 @@ class Trainer:
 
     def get_batch(self):
         audio, tokens, loss_mask = self.dataloader.get_prepared_batch()
-        normalized_audio = audio / 32768.0
-        spectogram = self.batched_spectogram(normalized_audio)
+        spectogram = self.batched_spectogram(audio)
         spectogram = jnp.astype(spectogram, jnp.float32)
         tokens = jnp.astype(tokens, jnp.uint32)
         loss_mask = jnp.astype(loss_mask, jnp.uint8)

@@ -5,8 +5,7 @@ import numpy as np
 import bisect
 import datetime as dt
 import sentencepiece as spm
-
-from yoho.src.preprocessing.audio import load_audio
+from librosa import load
 
 from train.utils.base_dataloader import Dataloader
 from train.utils.standardize_text import standardize_text
@@ -150,7 +149,7 @@ class TranscriptionDataloader(Dataloader):
                 with open(transcript_path, encoding="utf-8") as f:
                     data = f.read()
                 transcript = list(srt.parse(data))
-                audio = load_audio(audio_path, self.config.yoho.sample_rate)
+                audio = load(audio_path, sr=self.config.yoho.sample_rate)[0]
 
                 relative_sample_idx = int(
                     sample_idx - (0 if asset_index == 0 else self.sizes[asset_index - 1])

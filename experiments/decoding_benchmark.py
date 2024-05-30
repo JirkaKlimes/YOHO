@@ -3,8 +3,10 @@ import os
 import time
 import numpy as np
 import pickle
-from yoho.src.preprocessing.audio import load_audio
 from tabulate import tabulate
+from librosa import load
+
+from yoho.src.preprocessing.audio import load_audio
 
 results = []
 pickle_duration = None
@@ -19,6 +21,8 @@ for path in Path("./data/decoding_benchmark").iterdir():
     elif suffix == ".pkl":
         with open(path, "rb") as f:
             pickle.load(f)
+    elif suffix == ".mp3":
+        load(path, sr=16000)
     else:
         load_audio(path, 16000)
     et = time.monotonic()
