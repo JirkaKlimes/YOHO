@@ -178,7 +178,7 @@ class Trainer:
                 threading.Thread(
                     target=self.save_metrics,
                     args=(
-                        int(self.state.step),
+                        int(self.state.step // self.hyperparameters.accumulated_batches),
                         float(self.learning_rate_schedule(self.state.step)),
                         batch_loss,
                     ),
