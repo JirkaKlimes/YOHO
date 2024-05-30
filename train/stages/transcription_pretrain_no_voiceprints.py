@@ -41,6 +41,7 @@ class Trainer:
             max_queued_batches=os.cpu_count(),
             num_workers=os.cpu_count(),
             disable_warnings=True,
+            warmup_queue=False,
         )
 
         self.batched_spectogram = get_batched_spectogram(self.config.yoho)
@@ -147,6 +148,7 @@ class Trainer:
             < self.hyperparameters.updates * self.hyperparameters.accumulated_batches
         ):
             accumulation_step = self.state.step % self.hyperparameters.accumulated_batches
+            step = self.state.step // self.hyperparameters.accumulated_batches
 
             spectogram, tokens, loss_mask = list(map(common_utils.shard, self.get_batch()))
 
@@ -179,20 +181,21 @@ class Trainer:
                 pbar.update()
                 pbar.set_postfix_str(f"Loss: {batch_loss}")
 
-                host_state = jax.device_get(self.state)
+                if step % self.hyperparameters.validation_frequency == 0:
+                    host_state = jax.device_get(self.state)
 
-                def _save():
-                    with open(self.checkpoint_path, "wb") as f:
-                        pickle.dump(
-                            (
-                                host_state.step,
-                                host_state.params,
-                                host_state.opt_state,
-                            ),
-                            f,
-                        )
+                    def _save():
+                        with open(self.checkpoint_path, "wb") as f:
+                            pickle.dump(
+                                (
+                                    host_state.step,
+                                    host_state.params,
+                                    host_state.opt_state,
+                                ),
+                                f,
+                            )
 
-                threading.Thread(target=_save).start()
+                    threading.Thread(target=_save).start()
 
 
 def main(config: SessionConfig):
