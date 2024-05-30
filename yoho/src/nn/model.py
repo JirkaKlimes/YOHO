@@ -37,19 +37,30 @@ class TextDecoder(nn.Module):
     blocks: int
     vocab_size: int
 
-    @nn.compact
-    def __call__(self, q: jnp.ndarray, kv: jnp.ndarray) -> jnp.ndarray:
-        embed = nn.Embed(self.vocab_size, self.dims)
-        q = embed(q)
+    def setup(self):
+        self.embed = nn.Embed(self.vocab_size, self.dims)
+        self.decoders = [
+            DecoderBlock(self.q_heads, self.kv_heads, self.dims) for _ in range(self.blocks)
+        ]
+        self.norm = nn.RMSNorm()
 
-        seq_len = q.shape[1]
+    def emebed_tokens(self, tokens: jnp.ndarray):
+        return self.embed(tokens)
+
+    def decode_embeddings(self, embeddings: jnp.ndarray, audio: jnp.ndarray):
+        seq_len = embeddings.shape[1]
         mask = jnp.triu(jnp.full((seq_len, seq_len), 1)).T
 
-        for _ in range(self.blocks):
-            q = DecoderBlock(self.q_heads, self.kv_heads, self.dims)(q, kv, mask=mask)
+        for decoder in self.decoders:
+            embeddings = decoder(embeddings, audio, mask=mask)
 
-        x = nn.RMSNorm()(q)
-        logits = x @ embed.embedding.T
+        embeddings = self.norm(embeddings)
+        logits = embeddings @ self.embed.embedding.T
+        return logits
+
+    def __call__(self, embeddings: jnp.ndarray, audio: jnp.ndarray) -> jnp.ndarray:
+        embeddings = self.emebed_tokens(embeddings)
+        logits = self.decode_embeddings(embeddings, audio)
         return logits
 
 
@@ -74,16 +85,20 @@ class Model(nn.Module):
             self.vocab_size,
         )
 
-    def __call__(self, text: jnp.ndarray, audio: jnp.ndarray):
+    def __call__(self, tokens: jnp.ndarray, audio: jnp.ndarray):
         audio_features = self.encode_audio(audio)
-        decoded_text = self.decode_text(text, audio_features)
+        embeddings = self.embedd_tokens(tokens)
+        decoded_text = self.decode_text(embeddings, audio_features)
         return decoded_text
 
     def encode_audio(self, audio: jnp.ndarray):
         return self.encoder(audio)
 
-    def decode_text(self, text: jnp.ndarray, audio: jnp.ndarray):
-        return self.decoder(text, audio)
+    def embedd_tokens(self, tokens: jnp.ndarray):
+        return self.decoder.emebed_tokens(tokens)
+
+    def decode_text(self, embeddings: jnp.ndarray, audio: jnp.ndarray):
+        return self.decoder.decode_embeddings(embeddings, audio)
 
 
 if __name__ == "__main__":

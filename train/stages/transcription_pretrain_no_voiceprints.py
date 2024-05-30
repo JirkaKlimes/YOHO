@@ -5,6 +5,7 @@ import jax.numpy as jnp
 from flax.training.train_state import TrainState
 from flax.training import common_utils
 from flax import jax_utils
+import flax.linen as nn
 import optax
 from tqdm import tqdm
 import os
@@ -20,6 +21,13 @@ from train.utils.config import SessionConfig
 # TODO: reject very wrong samples, save to bitmap image for visualization
 # TODO: write webui and launch server to monitor training progress
 # TODO: generate validation samples every few steps
+
+
+def fully_flatten_tree(tree):
+    flat_leaves = jax.tree.map(jnp.ravel, tree)
+    flat_tree, _ = jax.tree.flatten(flat_leaves)
+    flat_tree = jnp.concat(flat_tree)
+    return flat_tree
 
 
 class Trainer:
@@ -65,7 +73,7 @@ class Trainer:
             self.prepare_metrics()
 
     def prepare_metrics(self):
-        df = pd.DataFrame({"update": [], "learning_rate": [], "loss": []})
+        df = pd.DataFrame({"update": [], "learning_rate": [], "loss": [], "grad_divergence": []})
         df.to_csv(self.metrics_path, index=False)
 
     def load_state(self):
@@ -118,16 +126,69 @@ class Trainer:
         # TODO: normalize spectogram
         return spectogram, tokens, loss_mask
 
-    def save_metrics(self, update: int, learning_rate: float, loss: float):
+    def save_metrics(self, update: int, learning_rate: float, loss: float, grad_divergence: float):
         metrics = pd.DataFrame(
-            {"update": [update], "learning_rate": [learning_rate], "loss": [loss]}
+            {
+                "update": [update],
+                "learning_rate": [learning_rate],
+                "loss": [loss],
+                "grad_divergence": [grad_divergence],
+            }
         )
         metrics.to_csv(self.metrics_path, mode="a", header=False, index=False)
 
     def run(self):
         def train_step(state, spectogram, tokens, loss_mask):
+            def sample_corectness(state, spectogram, embeddings, loss_mask):
+                def loss_fn(params, spectogram, embeddings, loss_mask):
+                    audio_encoded = state.apply_fn(
+                        {"params": params}, spectogram, method=Model.encode_audio
+                    )
+                    logits = state.apply_fn(
+                        {"params": params}, embeddings, audio_encoded, method=Model.decode_text
+                    )
+                    loss = optax.softmax_cross_entropy_with_integer_labels(
+                        logits[:, :-1], tokens[:, 1:]
+                    )
+                    loss *= loss_mask[:, :-1]
+                    loss = jnp.mean(loss)
+                    return loss
+
+                grad_fn = jax.value_and_grad(loss_fn)
+                loss, grads = grad_fn(state.params, spectogram, embeddings, loss_mask)
+                grads = jax.lax.pmean(grads, axis_name="devices")
+
+                grad_divergence = jnp.dot(
+                    fully_flatten_tree(grads),
+                    fully_flatten_tree(state.opt_state.inner_opt_state[0].trace),
+                )
+
+                grad_divergence = jnp.log(1 + jnp.e ** (jnp.e - grad_divergence))
+
+                return grad_divergence, (grad_divergence, loss)
+
+            embeddings = state.apply_fn(
+                {"params": state.params}, tokens, method=Model.embedd_tokens
+            )
+
+            rejection_loss_fn = jax.grad(sample_corectness, argnums=1, has_aux=True)
+
+            sample_gradients, (grad_divergence, loss) = rejection_loss_fn(
+                state, spectogram, embeddings, loss_mask
+            )
+            sample_gradients = jnp.mean(sample_gradients**2, axis=(1, 2))
+            sample_gradients = nn.softmax(sample_gradients)
+
             def loss_fn(params, spectogram, tokens, loss_mask):
-                logits = state.apply_fn({"params": params}, tokens, spectogram)
+                embeddings = state.apply_fn(
+                    {"params": state.params}, tokens, method=Model.embedd_tokens
+                )
+                audio_encoded = state.apply_fn(
+                    {"params": params}, spectogram, method=Model.encode_audio
+                )
+                logits = state.apply_fn(
+                    {"params": params}, embeddings, audio_encoded, method=Model.decode_text
+                )
                 loss = optax.softmax_cross_entropy_with_integer_labels(
                     logits[:, :-1], tokens[:, 1:]
                 )
@@ -138,13 +199,16 @@ class Trainer:
             grad_fn = jax.value_and_grad(loss_fn)
             loss, grads = grad_fn(state.params, spectogram, tokens, loss_mask)
             grads = jax.lax.pmean(grads, axis_name="devices")
+
             state = state.apply_gradients(grads=grads)
-            return state, loss
+
+            return state, loss, grad_divergence, sample_gradients
 
         train_step = jax.pmap(train_step, axis_name="devices", donate_argnums=(0,))
         device_states = jax_utils.replicate(self.state)
 
         acc_loss = 0
+        acc_grad_div = 0
         pbar = tqdm(
             initial=int(self.state.step // self.hyperparameters.accumulated_batches),
             total=self.hyperparameters.updates,
@@ -158,19 +222,26 @@ class Trainer:
 
             spectogram, tokens, loss_mask = list(map(common_utils.shard, self.get_batch()))
 
-            device_states, loss = train_step(device_states, spectogram, tokens, loss_mask)
+            device_states, loss, grad_div, sample_gradient = train_step(
+                device_states, spectogram, tokens, loss_mask
+            )
             loss = jnp.mean(loss)
+            grad_div = jnp.mean(grad_div)
+            acc_loss += loss
+            acc_grad_div += grad_div
+            print(jnp.reshape(sample_gradient, (8, -1)))
 
             self.state = jax_utils.unreplicate(device_states)
 
-            acc_loss += loss
             pbar.set_description_str(
                 f"Acc: {accumulation_step+1}/{self.hyperparameters.accumulated_batches}"
             )
 
             if accumulation_step == self.hyperparameters.accumulated_batches - 1:
                 batch_loss = float(acc_loss / self.hyperparameters.accumulated_batches)
+                batch_grad_div = float(acc_grad_div / self.hyperparameters.accumulated_batches)
                 acc_loss = 0
+                acc_grad_div = 0
 
                 pbar.update()
                 pbar.set_postfix_str(f"Loss: {batch_loss:.4e}")
@@ -181,6 +252,7 @@ class Trainer:
                         int(self.state.step // self.hyperparameters.accumulated_batches),
                         float(self.learning_rate_schedule(self.state.step)),
                         batch_loss,
+                        batch_grad_div,
                     ),
                 ).start()
 
