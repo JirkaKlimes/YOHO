@@ -4,7 +4,7 @@ import shutil
 
 
 parser = argparse.ArgumentParser(description="Create a new YOHO training session")
-parser.add_argument("name", type=str, help="Name of the session")
+parser.add_argument("name", type=str, nargs="?", default="main", help="Name of the session")
 
 args = parser.parse_args()
 
