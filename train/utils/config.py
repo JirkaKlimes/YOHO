@@ -1,6 +1,7 @@
 from typing import List, Union
 from pydantic import BaseModel
 from pathlib import Path
+import toml
 
 from yoho.src.config import YOHOConfig
 
@@ -71,3 +72,17 @@ class SessionConfig(BaseModel):
     @property
     def path(self):
         return Path("./sessions").joinpath(self.name)
+
+
+def load_config(name: str):
+    path = Path("sessions", name)
+    if not path.exists():
+        print(f"Cannot load session config. Session `{name}` doesn't exist!")
+        quit()
+    config = SessionConfig(name=name, **toml.load(path.joinpath("config.toml")))
+    for attribute in config.weights.__annotations__.keys():
+        current_path = getattr(config.weights, attribute)
+        new_path = config.path.joinpath(current_path)
+        setattr(config.weights, attribute, new_path)
+
+    return config

@@ -3,7 +3,7 @@ import sentencepiece as spm
 import io
 from eld import LanguageDetector
 
-from yoho.src.preprocessing.tokenizer import load_tokenizer
+from yoho.src.tokenizer import load_tokenizer
 
 from train.utils.config import SessionConfig
 from train.utils.standardize_text import standardize_text

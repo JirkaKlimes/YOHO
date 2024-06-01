@@ -11,7 +11,7 @@ import os
 import pandas as pd
 
 from yoho.src.nn.model import Model
-from yoho.src.preprocessing.tokenizer import load_tokenizer
+from yoho.src.tokenizer import load_tokenizer
 from yoho.src.preprocessing.audio import get_batched_spectogram, normalize_spectogram
 
 from train.utils.dataloaders import TranscriptionDataloader

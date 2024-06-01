@@ -1,9 +1,7 @@
 import argparse
 import os
-from pathlib import Path
-import toml
 
-from train.utils.config import SessionConfig
+from train.utils.config import load_config
 
 
 parser = argparse.ArgumentParser(
@@ -27,23 +25,7 @@ parser.add_argument(
 )
 
 args = parser.parse_args()
-
-path = Path("./sessions/").joinpath(args.name)
-
-if not path.exists():
-    print(f"Session {args.name} doesn't exist!")
-    quit()
-
-
-config = SessionConfig(
-    name=args.name,
-    **toml.load(path.joinpath("config.toml")),
-)
-
-for attribute in config.weights.__annotations__.keys():
-    current_path = getattr(config.weights, attribute)
-    new_path = config.path.joinpath(current_path)
-    setattr(config.weights, attribute, new_path)
+config = load_config(args.name)
 
 if config.hardware.devices != "all":
     os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, config.devices))
