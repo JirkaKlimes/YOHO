@@ -54,7 +54,7 @@ def get_batched_spectogram(config: YOHOConfig):
 
 def normalize_spectogram(spectogram):
     spec = jnp.log10(jnp.maximum(spectogram, 1e-20))
-    mean = jnp.mean(spec, axis=-1, keepdims=True)
-    std = jnp.std(spec, axis=-1, keepdims=True)
-    spec = jnp.where(std == 0, 0, (spec - mean) / std)
+    mean = jnp.mean(spec, axis=(-1, -2), keepdims=True)
+    std = jnp.std(spec, axis=(-1, -2), keepdims=True)
+    spec = (spec - mean) / jnp.where(std != 0, std, 1)
     return spec
