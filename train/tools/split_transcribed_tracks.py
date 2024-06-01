@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import srt
 from pathlib import Path
@@ -100,7 +101,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--workers",
         type=int,
-        default=4,
+        default=os.cpu_count(),
         help="Number of worker processes to use for multiprocessing.",
     )
 
