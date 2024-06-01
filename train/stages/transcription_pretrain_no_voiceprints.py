@@ -69,7 +69,7 @@ class Trainer:
         )
 
         self.optimizer = optax.MultiSteps(
-            optax.sgd(self.learning_rate_schedule, self.hyperparameters.momentum),
+            optax.adamw(self.learning_rate_schedule),
             self.hyperparameters.accumulated_batches,
         )
 

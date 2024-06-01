@@ -37,9 +37,8 @@ max_token_length = 32
 vocab_size = 16000
 
 [hyperparameters.transcribe_pretrain]
-learning_rate = 0.01
-final_learning_rate = 0.0005
-momentum = 0.9
+learning_rate = 0.001
+final_learning_rate = 0.00001
 batch_size = 16
 accumulated_batches = 16
 updates = 250000
@@ -48,9 +47,8 @@ validation_frequency = 25
 speechless_sample_ratio = 0.1
 
 [hyperparameters.reconstruct_pretrain]
-learning_rate = 0.01
-final_learning_rate = 0.0005
-momentum = 0.9
+learning_rate = 0.001
+final_learning_rate = 0.00001
 batch_size = 16
 accumulated_batches = 16
 updates = 250000
@@ -58,9 +56,8 @@ warmup_updates = 2500
 validation_frequency = 25
 
 [hyperparameters.voiceprint_finetune]
-learning_rate = 0.01
-final_learning_rate = 0.0005
-momentum = 0.9
+learning_rate = 0.001
+final_learning_rate = 0.00001
 batch_size = 16
 accumulated_batches = 16
 updates = 100000
@@ -68,9 +65,8 @@ warmup_updates = 1000
 validation_frequency = 25
 
 [hyperparameters.transcribe_finetune]
-learning_rate = 0.01
-final_learning_rate = 0.0005
-momentum = 0.9
+learning_rate = 0.001
+final_learning_rate = 0.00001
 batch_size = 16
 accumulated_batches = 16
 updates = 250000

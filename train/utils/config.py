@@ -21,7 +21,6 @@ class Tokenizer(BaseModel):
 class Training(BaseModel):
     learning_rate: float
     final_learning_rate: float
-    momentum: float
     batch_size: int
     accumulated_batches: int
     updates: int
