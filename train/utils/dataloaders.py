@@ -204,9 +204,9 @@ class TranscriptionDataloader(Dataloader):
         )
         loss_mask = np.zeros((self.batch_size, self.config.yoho.max_text_len), np.uint8)
         for i, (length, tokens) in enumerate(zip(seq_lengths, tokens_batch)):
-            loss_mask[i, : length - 1] = 1
+            loss_mask[i, :length] = 1
             for j, tok in enumerate(tokens):
                 if tok == self.tokenizer.encode("<|voiceprint|>")[0]:
-                    loss_mask[i, j - 1] = 0
+                    loss_mask[i, j] = 0
 
         return audio_batch, tokens_batch, loss_mask

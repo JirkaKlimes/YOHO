@@ -4,7 +4,9 @@ import jax
 import jax.numpy as jnp
 from flax.training.train_state import TrainState
 from flax.training import common_utils
+import flax.linen as nn
 from flax import jax_utils
+import numpy as np
 import optax
 from tqdm import tqdm
 import os
@@ -146,19 +148,38 @@ class Trainer:
         metrics.to_csv(self.metrics_path, mode="a", header=False, index=False)
 
     def run(self):
+        @jax.jit
         def loss_fn(params, state, spectogram, tokens, loss_mask):
             logits = state.apply_fn({"params": params}, tokens, spectogram)
             loss = optax.softmax_cross_entropy_with_integer_labels(logits[:, :-1], tokens[:, 1:])
-            loss *= loss_mask[:, :-1]
+            loss *= loss_mask[:, 1:]
             loss = jnp.mean(loss)
             return loss
 
+        @jax.jit
         def train_step(state, spectogram, tokens, loss_mask):
             grad_fn = jax.value_and_grad(loss_fn)
             loss, grads = grad_fn(state.params, state, spectogram, tokens, loss_mask)
             grads = jax.lax.pmean(grads, axis_name="devices")
             state = state.apply_gradients(grads=grads)
             return state, loss
+
+        @jax.jit
+        def encode_audio(state, spectogram):
+            audio_features = state.apply_fn(
+                {"params": state.params}, spectogram, method=Model.encode_audio
+            )
+            return audio_features
+
+        @jax.jit
+        def decode_text(state, tokens, audio_features):
+            logits = state.apply_fn(
+                {"params": state.params},
+                tokens,
+                audio_features,
+                method=Model.decode_text,
+            )
+            return logits
 
         train_step = jax.pmap(train_step, axis_name="devices", donate_argnums=(0,))
         device_states = jax_utils.replicate(self.state)
@@ -199,6 +220,26 @@ class Trainer:
                         self.state.params, self.state, spectogram, tokens, loss_mask
                     )
                     validation_loss = float(validation_loss)
+
+                    decoded_tokens = np.zeros(
+                        (self.hyperparameters.batch_size, self.config.yoho.max_text_len),
+                        dtype=np.uint32,
+                    )
+                    audio_features = encode_audio(self.state, spectogram)
+                    decoded_tokens[:, 0] = tokens[:, 0]
+                    for i in range(1, decoded_tokens.shape[1]):
+                        logits = decode_text(self.state, decoded_tokens, audio_features)[:, i - 1]
+                        probs = nn.softmax(logits, axis=-1)
+                        toks = jnp.argmax(probs, axis=-1)
+                        decoded_tokens[:, i] = toks
+                    for correct_tokens, predicted_tokens in zip(tokens, decoded_tokens):
+                        correct_transcript = self.tokenizer.Decode(list(map(int, correct_tokens)))
+                        predicted_transcript = self.tokenizer.Decode(
+                            list(map(int, predicted_tokens))
+                        )
+                        print("=" * 20)
+                        print(f"Correct: {correct_transcript}")
+                        print(f"Predicted: {predicted_transcript}")
 
                     host_state = jax.device_get(self.state)
 
