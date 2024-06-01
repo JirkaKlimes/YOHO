@@ -12,7 +12,7 @@ import pandas as pd
 
 from yoho.src.nn.model import Model
 from yoho.src.preprocessing.tokenizer import load_tokenizer
-from yoho.src.preprocessing.audio import get_batched_spectogram
+from yoho.src.preprocessing.audio import get_batched_spectogram, normalize_spectogram
 
 from train.utils.dataloaders import TranscriptionDataloader
 from train.utils.config import SessionConfig
@@ -131,7 +131,7 @@ class Trainer:
         spectogram = jnp.astype(spectogram, jnp.float32)
         tokens = jnp.astype(tokens, jnp.uint32)
         loss_mask = jnp.astype(loss_mask, jnp.uint8)
-        # TODO: normalize spectogram
+        spectogram = normalize_spectogram(spectogram)
         return spectogram, tokens, loss_mask
 
     def save_metrics(self, update: int, learning_rate: float, loss: float, val_loss: float):

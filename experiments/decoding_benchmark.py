@@ -11,7 +11,7 @@ from yoho.src.preprocessing.audio import load_audio
 results = []
 pickle_duration = None
 
-for path in Path("./data/decoding_benchmark").iterdir():
+for path in Path("./data/audio").iterdir():
     suffix = path.suffix
     file_size = os.stat(path).st_size / (1024 * 1024)
 
