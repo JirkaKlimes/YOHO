@@ -7,7 +7,7 @@ from yoho.src.tokenizer import load_tokenizer
 from train.utils.config import load_config
 from train.utils.dataloaders import TranscriptionDataloader
 
-config = load_config("test")
+config = load_config("main")
 tokenizer = load_tokenizer(config.weights.tokenizer)
 
 dataloader = TranscriptionDataloader(
