@@ -33,13 +33,26 @@ class Trainer:
 
         self.tokenizer = load_tokenizer(config.weights.tokenizer)
         self.model = Model(self.config.yoho, self.tokenizer.vocab_size())
-        self.dataloader = TranscriptionDataloader(
+
+        self.train_dataloader = TranscriptionDataloader(
             self.config,
+            self.config.dataset.noisy.joinpath("./train"),
             self.tokenizer,
             self.hyperparameters.batch_size,
             shuffle=True,
             max_queued_batches=os.cpu_count(),
             num_workers=os.cpu_count(),
+            disable_warnings=True,
+            warmup_queue=False,
+        )
+        self.val_dataloader = TranscriptionDataloader(
+            self.config,
+            self.config.dataset.noisy.joinpath("./val"),
+            self.tokenizer,
+            self.hyperparameters.batch_size,
+            shuffle=True,
+            max_queued_batches=1,
+            num_workers=1,
             disable_warnings=True,
             warmup_queue=False,
         )
@@ -65,7 +78,7 @@ class Trainer:
             self.prepare_metrics()
 
     def prepare_metrics(self):
-        df = pd.DataFrame({"update": [], "learning_rate": [], "loss": []})
+        df = pd.DataFrame({"update": [], "learning_rate": [], "loss": [], "val_loss": []})
         df.to_csv(self.metrics_path, index=False)
 
     def load_state(self):
@@ -109,8 +122,11 @@ class Trainer:
 
             return state
 
-    def get_batch(self):
-        audio, tokens, loss_mask = self.dataloader.get_prepared_batch()
+    def get_batch(self, validation: bool = False):
+        if validation:
+            audio, tokens, loss_mask = self.val_dataloader.get_prepared_batch()
+        else:
+            audio, tokens, loss_mask = self.train_dataloader.get_prepared_batch()
         spectogram = self.batched_spectogram(audio)
         spectogram = jnp.astype(spectogram, jnp.float32)
         tokens = jnp.astype(tokens, jnp.uint32)
@@ -118,25 +134,28 @@ class Trainer:
         # TODO: normalize spectogram
         return spectogram, tokens, loss_mask
 
-    def save_metrics(self, update: int, learning_rate: float, loss: float):
+    def save_metrics(self, update: int, learning_rate: float, loss: float, val_loss: float):
         metrics = pd.DataFrame(
-            {"update": [update], "learning_rate": [learning_rate], "loss": [loss]}
+            {
+                "update": [update],
+                "learning_rate": [learning_rate],
+                "loss": [loss],
+                "val_loss": [val_loss],
+            }
         )
         metrics.to_csv(self.metrics_path, mode="a", header=False, index=False)
 
     def run(self):
-        def train_step(state, spectogram, tokens, loss_mask):
-            def loss_fn(params, spectogram, tokens, loss_mask):
-                logits = state.apply_fn({"params": params}, tokens, spectogram)
-                loss = optax.softmax_cross_entropy_with_integer_labels(
-                    logits[:, :-1], tokens[:, 1:]
-                )
-                loss *= loss_mask[:, :-1]
-                loss = jnp.mean(loss)
-                return loss
+        def loss_fn(params, state, spectogram, tokens, loss_mask):
+            logits = state.apply_fn({"params": params}, tokens, spectogram)
+            loss = optax.softmax_cross_entropy_with_integer_labels(logits[:, :-1], tokens[:, 1:])
+            loss *= loss_mask[:, :-1]
+            loss = jnp.mean(loss)
+            return loss
 
+        def train_step(state, spectogram, tokens, loss_mask):
             grad_fn = jax.value_and_grad(loss_fn)
-            loss, grads = grad_fn(state.params, spectogram, tokens, loss_mask)
+            loss, grads = grad_fn(state.params, state, spectogram, tokens, loss_mask)
             grads = jax.lax.pmean(grads, axis_name="devices")
             state = state.apply_gradients(grads=grads)
             return state, loss
@@ -149,6 +168,7 @@ class Trainer:
             initial=int(self.state.step // self.hyperparameters.accumulated_batches),
             total=self.hyperparameters.updates,
         )
+
         while (
             self.state.step
             < self.hyperparameters.updates * self.hyperparameters.accumulated_batches
@@ -156,35 +176,30 @@ class Trainer:
             accumulation_step = self.state.step % self.hyperparameters.accumulated_batches
             step = self.state.step // self.hyperparameters.accumulated_batches
 
-            spectogram, tokens, loss_mask = list(map(common_utils.shard, self.get_batch()))
-
+            spectogram, tokens, loss_mask = map(common_utils.shard, self.get_batch())
             device_states, loss = train_step(device_states, spectogram, tokens, loss_mask)
             loss = jnp.mean(loss)
-
             self.state = jax_utils.unreplicate(device_states)
-
             acc_loss += loss
+
             pbar.set_description_str(
-                f"Acc: {accumulation_step+1}/{self.hyperparameters.accumulated_batches}"
+                f"Acc: {accumulation_step + 1}/{self.hyperparameters.accumulated_batches}"
             )
 
             if accumulation_step == self.hyperparameters.accumulated_batches - 1:
                 batch_loss = float(acc_loss / self.hyperparameters.accumulated_batches)
                 acc_loss = 0
-
                 pbar.update()
                 pbar.set_postfix_str(f"Loss: {batch_loss:.4e}")
 
-                threading.Thread(
-                    target=self.save_metrics,
-                    args=(
-                        int(self.state.step // self.hyperparameters.accumulated_batches),
-                        float(self.learning_rate_schedule(self.state.step)),
-                        batch_loss,
-                    ),
-                ).start()
-
+                validation_loss = None
                 if step % self.hyperparameters.validation_frequency == 0:
+                    spectogram, tokens, loss_mask = self.get_batch(validation=True)
+                    validation_loss = loss_fn(
+                        self.state.params, self.state, spectogram, tokens, loss_mask
+                    )
+                    validation_loss = float(validation_loss)
+
                     host_state = jax.device_get(self.state)
 
                     def _save():
@@ -199,6 +214,16 @@ class Trainer:
                             )
 
                     threading.Thread(target=_save).start()
+
+                threading.Thread(
+                    target=self.save_metrics,
+                    args=(
+                        int(self.state.step // self.hyperparameters.accumulated_batches),
+                        float(self.learning_rate_schedule(self.state.step)),
+                        batch_loss,
+                        validation_loss,
+                    ),
+                ).start()
 
 
 def main(config: SessionConfig):

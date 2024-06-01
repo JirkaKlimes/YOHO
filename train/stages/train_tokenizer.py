@@ -11,9 +11,12 @@ from train.utils.standardize_text import standardize_text
 
 def load_transcripts(config: SessionConfig):
     paths = [
-        *config.dataset.noisy.joinpath("./transcripts").iterdir(),
-        *config.dataset.clean.joinpath("./transcripts").iterdir(),
-        *config.dataset.finetune.joinpath("./transcripts").iterdir(),
+        *config.dataset.noisy.joinpath("./train", "./transcripts").iterdir(),
+        *config.dataset.clean.joinpath("./train", "./transcripts").iterdir(),
+        *config.dataset.finetune.joinpath("./train", "./transcripts").iterdir(),
+        *config.dataset.noisy.joinpath("./val", "./transcripts").iterdir(),
+        *config.dataset.clean.joinpath("./val", "./transcripts").iterdir(),
+        *config.dataset.finetune.joinpath("./val", "./transcripts").iterdir(),
     ]
 
     for p in paths:

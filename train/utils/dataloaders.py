@@ -6,6 +6,7 @@ import bisect
 import datetime as dt
 import sentencepiece as spm
 from librosa import load
+from pathlib import Path
 
 from train.utils.base_dataloader import Dataloader
 from train.utils.standardize_text import standardize_text
@@ -16,6 +17,7 @@ class TranscriptionDataloader(Dataloader):
     def __init__(
         self,
         config: SessionConfig,
+        path: Path,
         tokenizer: spm.SentencePieceProcessor,
         batch_size: int,
         shuffle: bool = True,
@@ -31,8 +33,8 @@ class TranscriptionDataloader(Dataloader):
 
         language_detector = LanguageDetector()
 
-        self.root_path = self.config.dataset.noisy
-        all_paths = self.root_path.joinpath("transcripts").iterdir()
+        self.path = path
+        all_paths = self.path.joinpath("transcripts").iterdir()
         sizes = []
         paths = []
         langs = []
@@ -45,7 +47,7 @@ class TranscriptionDataloader(Dataloader):
             if lang not in self.config.language_whitelist:
                 continue
             sizes.append(len(transcript))
-            paths.append((path, self.root_path.joinpath("audio", path.with_suffix(".mp3").name)))
+            paths.append((path, self.path.joinpath("audio", path.with_suffix(".mp3").name)))
             langs.append(lang)
 
         self.sizes = np.array(sizes, dtype=np.uint64).cumsum()
