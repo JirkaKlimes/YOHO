@@ -10,6 +10,7 @@ from librosa import load
 from train.utils.base_dataloader import Dataloader
 from train.utils.standardize_text import standardize_text
 from train.utils.config import SessionConfig
+from train.utils.augmenter import augmenter
 
 
 class TranscriptionDataloader(Dataloader):
@@ -119,7 +120,7 @@ class TranscriptionDataloader(Dataloader):
         to_sample = int(np.floor(end_time.total_seconds() * self.config.yoho.sample_rate))
         audio = audio[from_sample:to_sample]
 
-        # TODO: add augmentation
+        audio = augmenter(audio, self.config.yoho.sample_rate)
 
         if len(audio) > self.config.yoho.n_samples:
             return None, None
@@ -156,7 +157,7 @@ class TranscriptionDataloader(Dataloader):
                 with open(transcript_path, encoding="utf-8") as f:
                     data = f.read()
                 transcript = list(srt.parse(data))
-                audio = load(audio_path, sr=self.config.yoho.sample_rate)[0]
+                audio = load(audio_path, sr=self.config.yoho.sample_rate)[0] / 32768.0
 
                 relative_sample_idx = int(
                     sample_idx - (0 if asset_index == 0 else self.sizes[asset_index - 1])
