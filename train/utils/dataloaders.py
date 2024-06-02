@@ -119,6 +119,8 @@ class TranscriptionDataloader(Dataloader):
         to_sample = int(np.floor(end_time.total_seconds() * self.config.yoho.sample_rate))
         audio = audio[from_sample:to_sample]
 
+        # TODO: add augmentation
+
         if len(audio) > self.config.yoho.n_samples:
             return None, None
 

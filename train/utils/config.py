@@ -27,6 +27,7 @@ class Training(BaseModel):
     updates: int
     warmup_updates: int
     validation_frequency: int
+    validation_samples: int
 
 
 class TrainingASR(Training):

@@ -1,3 +1,4 @@
+import json
 import pickle
 import threading
 import jax
@@ -32,6 +33,7 @@ class Trainer:
         self.stage_path.mkdir(exist_ok=True)
         self.checkpoint_path = self.stage_path.joinpath("checkpoint.pkl")
         self.metrics_path = self.stage_path.joinpath("metrics.csv")
+        self.validation_path = self.stage_path.joinpath("validations.jsonl")
 
         self.tokenizer = load_tokenizer(config.weights.tokenizer)
         self.model = Model(self.config.yoho, self.tokenizer.vocab_size())
@@ -147,6 +149,14 @@ class Trainer:
         )
         metrics.to_csv(self.metrics_path, mode="a", header=False, index=False)
 
+    def write_validation(self, correct_batch, predicted_batch):
+        dump = [
+            {"correct": correct, "predicted": predicted}
+            for correct, predicted in zip(correct_batch, predicted_batch)
+        ]
+        with open(self.validation_path, "a") as f:
+            json.dump(dump, f, indent=4, sort_keys=False, ensure_ascii=False)
+
     def run(self):
         @jax.jit
         def loss_fn(params, state, spectogram, tokens, loss_mask):
@@ -221,8 +231,12 @@ class Trainer:
                     )
                     validation_loss = float(validation_loss)
 
+                    spectogram = spectogram[: self.hyperparameters.validation_samples]
+                    tokens = tokens[: self.hyperparameters.validation_samples]
+                    loss_mask = loss_mask[: self.hyperparameters.validation_samples]
+
                     decoded_tokens = np.zeros(
-                        (self.hyperparameters.batch_size, self.config.yoho.max_text_len),
+                        (self.hyperparameters.validation_samples, self.config.yoho.max_text_len),
                         dtype=np.uint32,
                     )
                     audio_features = encode_audio(self.state, spectogram)
@@ -232,14 +246,15 @@ class Trainer:
                         probs = nn.softmax(logits, axis=-1)
                         toks = jnp.argmax(probs, axis=-1)
                         decoded_tokens[:, i] = toks
-                    for correct_tokens, predicted_tokens in zip(tokens, decoded_tokens):
-                        correct_transcript = self.tokenizer.Decode(list(map(int, correct_tokens)))
-                        predicted_transcript = self.tokenizer.Decode(
-                            list(map(int, predicted_tokens))
-                        )
-                        print("=" * 20)
-                        print(f"Correct: {correct_transcript}")
-                        print(f"Predicted: {predicted_transcript}")
+
+                    correct_transcript = [
+                        self.tokenizer.Decode(list(map(int, toks))) for toks in tokens
+                    ]
+                    predicted_transcript = [
+                        self.tokenizer.Decode(list(map(int, toks))) for toks in decoded_tokens
+                    ]
+
+                    self.write_validation(correct_transcript, predicted_transcript)
 
                     host_state = jax.device_get(self.state)
 
