@@ -37,8 +37,8 @@ class Trainer:
         self.model = Model(self.config.yoho, self.tokenizer.vocab_size())
 
         self.train_dataloader = TranscriptionDataloader(
+            (0, 0.9),
             self.config,
-            self.config.dataset.noisy.joinpath("./train"),
             self.tokenizer,
             self.hyperparameters.batch_size,
             shuffle=True,
@@ -48,8 +48,8 @@ class Trainer:
             warmup_queue=False,
         )
         self.val_dataloader = TranscriptionDataloader(
+            (0.9, 1),
             self.config,
-            self.config.dataset.noisy.joinpath("./val"),
             self.tokenizer,
             self.hyperparameters.batch_size,
             shuffle=True,

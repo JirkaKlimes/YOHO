@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Tuple
 import srt
 from eld import LanguageDetector
 import numpy as np
@@ -6,7 +6,6 @@ import bisect
 import datetime as dt
 import sentencepiece as spm
 from librosa import load
-from pathlib import Path
 
 from train.utils.base_dataloader import Dataloader
 from train.utils.standardize_text import standardize_text
@@ -16,8 +15,8 @@ from train.utils.config import SessionConfig
 class TranscriptionDataloader(Dataloader):
     def __init__(
         self,
+        slice: Tuple[float, float],
         config: SessionConfig,
-        path: Path,
         tokenizer: spm.SentencePieceProcessor,
         batch_size: int,
         shuffle: bool = True,
@@ -33,8 +32,10 @@ class TranscriptionDataloader(Dataloader):
 
         language_detector = LanguageDetector()
 
-        self.path = path
-        all_paths = self.path.joinpath("transcripts").iterdir()
+        all_paths = list(self.config.dataset.noisy.joinpath("transcripts").iterdir())
+        i = int(slice[0] * len(all_paths))
+        j = int(slice[1] * len(all_paths))
+        all_paths = all_paths[i:j]
         sizes = []
         paths = []
         langs = []
@@ -47,7 +48,9 @@ class TranscriptionDataloader(Dataloader):
             if lang not in self.config.language_whitelist:
                 continue
             sizes.append(len(transcript))
-            paths.append((path, self.path.joinpath("audio", path.with_suffix(".mp3").name)))
+            paths.append(
+                (path, self.config.dataset.noisy.joinpath("audio", path.with_suffix(".mp3").name))
+            )
             langs.append(lang)
 
         self.sizes = np.array(sizes, dtype=np.uint64).cumsum()
