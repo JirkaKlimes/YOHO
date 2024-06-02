@@ -157,7 +157,7 @@ class TranscriptionDataloader(Dataloader):
                 with open(transcript_path, encoding="utf-8") as f:
                     data = f.read()
                 transcript = list(srt.parse(data))
-                audio = load(audio_path, sr=self.config.yoho.sample_rate)[0] / 32768.0
+                audio = load(audio_path, sr=self.config.yoho.sample_rate)[0]
 
                 relative_sample_idx = int(
                     sample_idx - (0 if asset_index == 0 else self.sizes[asset_index - 1])

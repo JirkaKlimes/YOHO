@@ -11,8 +11,8 @@ config = load_config("main")
 tokenizer = load_tokenizer(config.weights.tokenizer)
 
 dataloader = TranscriptionDataloader(
+    (0, 1),
     config,
-    config.dataset.noisy.joinpath("train"),
     tokenizer,
     batch_size=16,
     max_queued_batches=1,
