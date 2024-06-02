@@ -12,7 +12,7 @@ class DataHandler(FileSystemEventHandler):
         self.update_func = update_func
 
     def on_modified(self, event):
-        if event.src_path == self.file_path:
+        if event.src_path == str(self.file_path):
             self.update_func()
 
 
@@ -23,7 +23,12 @@ def plot_live(file_path):
     plt.subplots_adjust(hspace=0.5)
 
     def update_plot():
-        data = pd.read_csv(file_path)
+        try:
+            data = pd.read_csv(file_path)
+        except pd.errors.EmptyDataError:
+            print("CSV file is empty.")
+            return
+
         val_data = data.dropna(subset=["val_loss"])
 
         axs[0].clear()
@@ -49,13 +54,13 @@ def plot_live(file_path):
         axs[2].set_title("Validation Loss")
         mplcyberpunk.add_glow_effects(axs[2])
 
-        plt.draw()
+        fig.canvas.draw_idle()
 
     update_plot()
 
     event_handler = DataHandler(file_path, update_plot)
     observer = Observer()
-    observer.schedule(event_handler, path=file_path, recursive=False)
+    observer.schedule(event_handler, path=file_path.parent, recursive=False)
     observer.start()
 
     try:
