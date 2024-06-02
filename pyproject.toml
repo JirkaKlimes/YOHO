@@ -35,6 +35,8 @@ audiomentations = "^0.35.0"
 pydantic = "^2.7.1"
 srt = "^3.5.3"
 soundfile = "^0.12.1"
+watchdog = "^4.0.1"
+mplcyberpunk = "^0.7.1"
 
 [build-system]
 requires = ["poetry-core"]
