@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 import flax.linen as nn
 
-from yoho.src.nn.layers import EncoderBlock, DecoderBlock
+from yoho.src.nn.layers import EncoderBlock, DecoderBlock, SinPositionalEncoding
 from yoho.src.config import YOHOConfig
 
 
@@ -22,6 +22,7 @@ class AudioEncoder(nn.Module):
         x = nn.Conv(self.dims, 3)(x)
         x = nn.RMSNorm()(x)
         x = nn.silu(x)
+        x = SinPositionalEncoding(self.seq_len, self.dims)(x)
 
         for _ in range(self.blocks):
             x = EncoderBlock(self.q_heads, self.kv_heads, self.dims)(x)
@@ -41,8 +42,14 @@ class TextDecoder(nn.Module):
     def __call__(self, q: jnp.ndarray, kv: jnp.ndarray) -> jnp.ndarray:
         embed = nn.Embed(self.vocab_size, self.dims)
         q = embed(q)
-
         seq_len = q.shape[1]
+
+        pos = self.param(
+            "positional_embedding",
+            nn.initializers.glorot_uniform(),
+            (self.seq_len, self.dims),
+        )
+        q += pos[:seq_len]
         mask = jnp.triu(jnp.full((seq_len, seq_len), 1)).T
 
         for _ in range(self.blocks):

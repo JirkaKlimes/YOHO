@@ -3,6 +3,26 @@ import jax.numpy as jnp
 import flax.linen as nn
 
 
+class SinPositionalEncoding(nn.Module):
+    length: int
+    dim: int
+    max_timescale: int = 10000
+
+    def sin_positional_encoding(self) -> jnp.ndarray:
+        """Returns sinusoids for positional embedding"""
+        assert self.dim & 1 == 0, "Number of dimensions must be even"
+        log_timescale_increment = jnp.log(self.max_timescale) / (self.dim // 2 - 1)
+        inv_timescales = jnp.e ** (-log_timescale_increment * jnp.arange(self.dim // 2))
+        scaled_time = jnp.arange(self.length)[:, None] * inv_timescales[None, :]
+        return jnp.concat([jnp.sin(scaled_time), jnp.cos(scaled_time)], axis=1)
+
+    def setup(self):
+        self.encoding_matrix = self.sin_positional_encoding()
+
+    def __call__(self, x):
+        return x + self.encoding_matrix
+
+
 class SwiGLU(nn.Module):
     """https://arxiv.org/pdf/2002.05202"""
 
@@ -81,9 +101,6 @@ class GroupedQueryAttention(nn.Module):
         xq = xq.transpose(0, 2, 1, 3)
         xk = xk.transpose(0, 2, 1, 3)
         xv = xv.transpose(0, 2, 1, 3)
-
-        xq = RoPE()(xq)
-        xk = RoPE()(xk)
 
         xk = xk.transpose(0, 1, 3, 2)
         attention_scores = (xq @ xk) * head_dim**-0.5
