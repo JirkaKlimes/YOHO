@@ -22,7 +22,8 @@ class AudioEncoder(nn.Module):
         x = nn.Conv(self.dims, 3)(x)
         x = nn.RMSNorm()(x)
         x = nn.silu(x)
-        x = SinPositionalEncoding(self.seq_len, self.dims)(x)
+        seq_len = x.shape[1]
+        x = SinPositionalEncoding(seq_len, self.dims)(x)
 
         for _ in range(self.blocks):
             x = EncoderBlock(self.q_heads, self.kv_heads, self.dims)(x)
