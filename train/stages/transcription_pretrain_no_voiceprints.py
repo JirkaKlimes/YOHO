@@ -88,7 +88,9 @@ class Trainer:
     def load_state(self):
         if self.checkpoint_path.exists():
             with open(self.checkpoint_path, "rb") as f:
-                step, params, opt_state = pickle.load(f)
+                step, params, opt_state, current_batch_idx = pickle.load(f)
+
+            self.train_dataloader.current_batch_idx = current_batch_idx
 
             state = TrainState(
                 step,
@@ -126,18 +128,6 @@ class Trainer:
 
             return state
 
-    def get_batch(self, validation: bool = False):
-        if validation:
-            audio, tokens, loss_mask = self.val_dataloader.get_prepared_batch()
-        else:
-            audio, tokens, loss_mask = self.train_dataloader.get_prepared_batch()
-        spectogram = self.batched_spectogram(audio)
-        spectogram = jnp.astype(spectogram, jnp.float32)
-        tokens = jnp.astype(tokens, jnp.uint32)
-        loss_mask = jnp.astype(loss_mask, jnp.uint8)
-        spectogram = normalize_spectogram(spectogram)
-        return spectogram, tokens, loss_mask
-
     def save_metrics(self, update: int, learning_rate: float, loss: float, val_loss: float):
         metrics = pd.DataFrame(
             {
@@ -159,15 +149,25 @@ class Trainer:
 
     def run(self):
         @jax.jit
+        def pre_procesing(audio, tokens, loss_mask):
+            spectogram = self.batched_spectogram(audio)
+            spectogram = jnp.astype(spectogram, jnp.float32)
+            tokens = jnp.astype(tokens, jnp.uint32)
+            loss_mask = jnp.astype(loss_mask, jnp.uint8)
+            spectogram = normalize_spectogram(spectogram)
+            return spectogram, tokens, loss_mask
+        
+        @jax.jit
         def loss_fn(params, state, spectogram, tokens, loss_mask):
             logits = state.apply_fn({"params": params}, tokens, spectogram)
             loss = optax.softmax_cross_entropy_with_integer_labels(logits[:, :-1], tokens[:, 1:])
             loss *= loss_mask[:, 1:]
-            loss = jnp.mean(loss)
+            loss = jnp.sum(loss) / jnp.sum(loss_mask[:, 1:])
             return loss
 
         @jax.jit
-        def train_step(state, spectogram, tokens, loss_mask):
+        def train_step(state, audio, tokens, loss_mask):
+            spectogram, tokens, loss_mask = pre_procesing(audio, tokens, loss_mask)
             grad_fn = jax.value_and_grad(loss_fn)
             loss, grads = grad_fn(state.params, state, spectogram, tokens, loss_mask)
             grads = jax.lax.pmean(grads, axis_name="devices")
@@ -207,8 +207,8 @@ class Trainer:
             accumulation_step = self.state.step % self.hyperparameters.accumulated_batches
             step = self.state.step // self.hyperparameters.accumulated_batches
 
-            spectogram, tokens, loss_mask = map(common_utils.shard, self.get_batch())
-            device_states, loss = train_step(device_states, spectogram, tokens, loss_mask)
+            audio, tokens, loss_mask = map(common_utils.shard, self.train_dataloader.get_prepared_batch())
+            device_states, loss = train_step(device_states, audio, tokens, loss_mask)
             loss = jnp.mean(loss)
             self.state = jax_utils.unreplicate(device_states)
             acc_loss += loss
@@ -225,7 +225,8 @@ class Trainer:
 
                 validation_loss = None
                 if step % self.hyperparameters.validation_frequency == 0:
-                    spectogram, tokens, loss_mask = self.get_batch(validation=True)
+                    audio, tokens, loss_mask = self.val_dataloader.get_prepared_batch()
+                    spectogram, tokens, loss_mask = pre_procesing(audio, tokens, loss_mask)
                     validation_loss = loss_fn(
                         self.state.params, self.state, spectogram, tokens, loss_mask
                     )
@@ -265,6 +266,7 @@ class Trainer:
                                     host_state.step,
                                     host_state.params,
                                     host_state.opt_state,
+                                    self.train_dataloader.current_batch_idx
                                 ),
                                 f,
                             )
