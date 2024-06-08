@@ -33,13 +33,11 @@ def mel_spectogram(audio, n_fft: int, hop_len: int, sample_rate: int, n_mels: in
     stft = jax.scipy.signal.stft(audio, nperseg=n_fft, noverlap=n_fft - hop_len, boundary=None)[-1]
     magnitudes = jnp.abs(stft) ** 2
     filters = mel_filter_banks(sample_rate, n_fft, n_mels)
-    spectogram = filters @ magnitudes
-    return spectogram.T
+    spectogram = jnp.einsum('ij,ajk->aki', filters, magnitudes)
+    return spectogram
 
 
 def get_batched_spectogram(config: YOHOConfig):
-    @jax.jit
-    @jax.vmap
     def func(audio):
         return mel_spectogram(
             audio,
