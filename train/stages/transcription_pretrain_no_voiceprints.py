@@ -88,9 +88,7 @@ class Trainer:
     def load_state(self):
         if self.checkpoint_path.exists():
             with open(self.checkpoint_path, "rb") as f:
-                step, params, opt_state, current_batch_idx = pickle.load(f)
-
-            self.train_dataloader.current_batch_idx = current_batch_idx
+                step, params, opt_state = pickle.load(f)
 
             state = TrainState(
                 step,
@@ -156,7 +154,7 @@ class Trainer:
             loss_mask = jnp.astype(loss_mask, jnp.uint8)
             spectogram = normalize_spectogram(spectogram)
             return spectogram, tokens, loss_mask
-        
+
         @jax.jit
         def loss_fn(params, state, spectogram, tokens, loss_mask):
             logits = state.apply_fn({"params": params}, tokens, spectogram)
@@ -207,7 +205,9 @@ class Trainer:
             accumulation_step = self.state.step % self.hyperparameters.accumulated_batches
             step = self.state.step // self.hyperparameters.accumulated_batches
 
-            audio, tokens, loss_mask = map(common_utils.shard, self.train_dataloader.get_prepared_batch())
+            audio, tokens, loss_mask = map(
+                common_utils.shard, self.train_dataloader.get_prepared_batch()
+            )
             device_states, loss = train_step(device_states, audio, tokens, loss_mask)
             loss = jnp.mean(loss)
             self.state = jax_utils.unreplicate(device_states)
@@ -266,7 +266,6 @@ class Trainer:
                                     host_state.step,
                                     host_state.params,
                                     host_state.opt_state,
-                                    self.train_dataloader.current_batch_idx
                                 ),
                                 f,
                             )
