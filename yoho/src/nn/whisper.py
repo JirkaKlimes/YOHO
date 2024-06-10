@@ -2,6 +2,8 @@ import jax.numpy as jnp
 import flax.linen as nn
 from typing import Optional
 
+from yoho.src.config import YOHOConfig
+
 
 class SinPositionalEncoding(nn.Module):
     length: int
@@ -126,7 +128,8 @@ class AudioEncoder(nn.Module):
         x = nn.gelu(x)
         x = nn.Conv(self.dims, 3, padding=1, strides=2, dtype=jnp.float32)(x)
         x = nn.gelu(x)
-        x = SinPositionalEncoding(self.seq_len, self.dims)(x)
+        seq_len = x.shape[1]
+        x = SinPositionalEncoding(seq_len, self.dims)(x)
 
         for _ in range(self.n_layers):
             x = EncoderBlock(self.dims, self.n_heads)(x)
@@ -166,41 +169,34 @@ class TextDecoder(nn.Module):
 
 
 class Whisper(nn.Module):
-    audio_dims: int
-    audio_seq_len: int
-    audio_heads: int
-    audio_layers: int
-    text_vocab_size: int
-    text_seq_len: int
-    text_dims: int
-    text_heads: int
-    text_layers: int
+    config: YOHOConfig
+    vocab_size: int
 
     def setup(self):
-        self.audio_encoder = AudioEncoder(
-            seq_len=self.audio_seq_len,
-            dims=self.audio_dims,
-            n_heads=self.audio_heads,
-            n_layers=self.audio_layers,
+        self.encoder = AudioEncoder(
+            seq_len=self.config.max_audio_len,
+            dims=self.config.dims,
+            n_heads=self.config.n_audio_heads,
+            n_layers=self.config.n_audio_blocks,
         )
-        self.text_decoder = TextDecoder(
-            vocab_size=self.text_vocab_size,
-            seq_len=self.text_seq_len,
-            dims=self.text_dims,
-            n_heads=self.text_heads,
-            n_layers=self.text_layers,
+        self.decoder = TextDecoder(
+            vocab_size=self.vocab_size,
+            seq_len=self.config.max_text_len,
+            dims=self.config.dims,
+            n_heads=self.config.n_text_heads,
+            n_layers=self.config.n_text_blocks,
         )
 
-    def encode_audio(self, mel: jnp.ndarray) -> jnp.ndarray:
-        return self.audio_encoder(mel)
+    def encode_audio(self, audio: jnp.ndarray):
+        return self.encoder(audio)
 
-    def decode_text(self, encoded_audio: jnp.ndarray, tokens: jnp.ndarray) -> jnp.ndarray:
-        return self.text_decoder(tokens, encoded_audio)
+    def decode_text(self, text: jnp.ndarray, audio: jnp.ndarray):
+        return self.decoder(text, audio)
 
-    def __call__(self, mel: jnp.ndarray, tokens: jnp.ndarray):
-        audio_features = self.audio_encoder(mel)
-        logits = self.text_decoder(tokens, audio_features)
-        return logits
+    def __call__(self, text: jnp.ndarray, audio: jnp.ndarray):
+        audio_features = self.encode_audio(audio)
+        decoded_text = self.decode_text(text, audio_features)
+        return decoded_text
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ import flax.linen as nn
 
 from yoho.src.nn.layers import EncoderBlock, DecoderBlock, SinPositionalEncoding
 from yoho.src.config import YOHOConfig
+from yoho.src.nn.whisper import Whisper
 
 
 class AudioEncoder(nn.Module):
@@ -61,37 +62,38 @@ class TextDecoder(nn.Module):
         return logits
 
 
-class Model(nn.Module):
-    config: YOHOConfig
-    vocab_size: int
+Model = Whisper
+# class Model(nn.Module):
+#     config: YOHOConfig
+#     vocab_size: int
 
-    def setup(self):
-        self.encoder = AudioEncoder(
-            self.config.n_audio_heads,
-            self.config.n_audio_heads // 2,
-            self.config.dims,
-            self.config.max_audio_len,
-            self.config.n_audio_blocks,
-        )
-        self.decoder = TextDecoder(
-            self.config.n_text_heads,
-            self.config.n_text_heads // 2,
-            self.config.dims,
-            self.config.max_text_len,
-            self.config.n_text_blocks,
-            self.vocab_size,
-        )
+#     def setup(self):
+#         self.encoder = AudioEncoder(
+#             self.config.n_audio_heads,
+#             self.config.n_audio_heads // 2,
+#             self.config.dims,
+#             self.config.max_audio_len,
+#             self.config.n_audio_blocks,
+#         )
+#         self.decoder = TextDecoder(
+#             self.config.n_text_heads,
+#             self.config.n_text_heads // 2,
+#             self.config.dims,
+#             self.config.max_text_len,
+#             self.config.n_text_blocks,
+#             self.vocab_size,
+#         )
 
-    def __call__(self, text: jnp.ndarray, audio: jnp.ndarray):
-        audio_features = self.encode_audio(audio)
-        decoded_text = self.decode_text(text, audio_features)
-        return decoded_text
+#     def __call__(self, text: jnp.ndarray, audio: jnp.ndarray):
+#         audio_features = self.encode_audio(audio)
+#         decoded_text = self.decode_text(text, audio_features)
+#         return decoded_text
 
-    def encode_audio(self, audio: jnp.ndarray):
-        return self.encoder(audio)
+#     def encode_audio(self, audio: jnp.ndarray):
+#         return self.encoder(audio)
 
-    def decode_text(self, text: jnp.ndarray, audio: jnp.ndarray):
-        return self.decoder(text, audio)
+#     def decode_text(self, text: jnp.ndarray, audio: jnp.ndarray):
+#         return self.decoder(text, audio)
 
 
 if __name__ == "__main__":

@@ -33,7 +33,7 @@ def mel_spectogram(audio, n_fft: int, hop_len: int, sample_rate: int, n_mels: in
     stft = jax.scipy.signal.stft(audio, nperseg=n_fft, noverlap=n_fft - hop_len, boundary=None)[-1]
     magnitudes = jnp.abs(stft) ** 2
     filters = mel_filter_banks(sample_rate, n_fft, n_mels)
-    spectogram = jnp.einsum('ij,ajk->aki', filters, magnitudes)
+    spectogram = jnp.einsum("ij,ajk->aki", filters, magnitudes)
     return spectogram
 
 
@@ -51,8 +51,7 @@ def get_batched_spectogram(config: YOHOConfig):
 
 
 def normalize_spectogram(spectogram):
-    spec = jnp.log10(jnp.maximum(spectogram, 1e-13))
-    mean = jnp.mean(spec, axis=(-1, -2), keepdims=True)
-    std = jnp.std(spec, axis=(-1, -2), keepdims=True)
-    spec = (spec - mean) / jnp.where(std != 0, std, 1)
+    spec = jnp.log10(jnp.clip(spectogram, a_min=1e-10))
+    spec = jnp.maximum(spec, spec.max() - 8.0)
+    spec = (spec + 4.0) / 4.0
     return spec
