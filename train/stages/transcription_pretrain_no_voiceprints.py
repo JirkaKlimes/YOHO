@@ -137,10 +137,22 @@ class Trainer:
         )
         metrics.to_csv(self.metrics_path, mode="a", header=False, index=False)
 
-    def write_validation(self, correct_batch, predicted_batch):
+    def write_validation(
+        self, val_correct_batch, val_predicted_batch, train_correct_batch, train_predicted_batch
+    ):
         dump = [
-            {"correct": correct, "predicted": predicted}
-            for correct, predicted in zip(correct_batch, predicted_batch)
+            {
+                "val_correct": val_correct,
+                "val_predicted": val_predicted,
+                "train_correct": train_correct,
+                "train_predicted": train_predicted,
+            }
+            for val_correct, val_predicted, train_correct, train_predicted in zip(
+                val_correct_batch,
+                val_predicted_batch,
+                train_correct_batch,
+                train_predicted_batch,
+            )
         ]
         with open(self.validation_path, "a") as f:
             json.dump(dump, f, indent=4, sort_keys=False, ensure_ascii=False)
@@ -232,12 +244,26 @@ class Trainer:
                     )
                     validation_loss = float(validation_loss)
 
-                    spectogram = spectogram[: self.hyperparameters.validation_samples]
-                    tokens = tokens[: self.hyperparameters.validation_samples]
-                    loss_mask = loss_mask[: self.hyperparameters.validation_samples]
+                    audio, tokens, loss_mask = map(
+                        lambda x: jnp.concat(
+                            [
+                                x[0][: self.hyperparameters.validation_samples],
+                                x[1][: self.hyperparameters.validation_samples],
+                            ]
+                        ),
+                        zip(
+                            self.val_dataloader.get_prepared_batch(),
+                            self.train_dataloader.get_prepared_batch(),
+                        ),
+                    )
+
+                    spectogram, tokens, loss_mask = pre_procesing(audio, tokens, loss_mask)
 
                     decoded_tokens = np.zeros(
-                        (self.hyperparameters.validation_samples, self.config.yoho.max_text_len),
+                        (
+                            self.hyperparameters.validation_samples * 2,
+                            self.config.yoho.max_text_len,
+                        ),
                         dtype=np.uint32,
                     )
                     audio_features = encode_audio(self.state, spectogram)
@@ -255,7 +281,12 @@ class Trainer:
                         self.tokenizer.Decode(list(map(int, toks))) for toks in decoded_tokens
                     ]
 
-                    self.write_validation(correct_transcript, predicted_transcript)
+                    self.write_validation(
+                        correct_transcript[: self.hyperparameters.validation_samples],
+                        predicted_transcript[: self.hyperparameters.validation_samples],
+                        correct_transcript[self.hyperparameters.validation_samples :],
+                        predicted_transcript[self.hyperparameters.validation_samples :],
+                    )
 
                     host_state = jax.device_get(self.state)
 
