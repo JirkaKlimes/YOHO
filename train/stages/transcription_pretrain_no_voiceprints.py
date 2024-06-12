@@ -1,5 +1,6 @@
 import json
 import pickle
+import re
 import threading
 import jax
 import jax.numpy as jnp
@@ -140,12 +141,22 @@ class Trainer:
     def write_validation(
         self, val_correct_batch, val_predicted_batch, train_correct_batch, train_predicted_batch
     ):
+        def humanify(text):
+            end = "<|endoftranscript|>"
+            text = re.sub(f"{re.escape(end)}.*", end, text)
+
+            text = re.sub(r"<\|startoftranscript\|>", "🚀", text)
+            text = re.sub(r"<\|endoftranscript\|>", "🏁", text)
+            text = re.sub(r"<\|voiceprint\|>", "🎙️", text)
+            text = re.sub(r"<\|t-\d*\|>", "⏱️", text)
+            return text
+
         dump = [
             {
-                "val_correct": val_correct,
-                "val_predicted": val_predicted,
-                "train_correct": train_correct,
-                "train_predicted": train_predicted,
+                "val_correct": humanify(val_correct),
+                "val_predicted": humanify(val_predicted),
+                "train_correct": humanify(train_correct),
+                "train_predicted": humanify(train_predicted),
             }
             for val_correct, val_predicted, train_correct, train_predicted in zip(
                 val_correct_batch,
