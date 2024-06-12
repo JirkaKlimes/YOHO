@@ -125,11 +125,13 @@ class EncoderBlock(nn.Module):
         res = x
         x = nn.RMSNorm()(x)
         x = GroupedQueryAttention(self.q_heads, self.dims, self.kv_heads)(x, x)
+        x = nn.Dropout(0.1)(x)
         x += res
 
         res = x
         x = nn.RMSNorm()(x)
         x = SwiGLU(self.dims * 3)(x)
+        x = nn.Dropout(0.1)(x)
         x += res
 
         return x
@@ -147,17 +149,20 @@ class DecoderBlock(nn.Module):
         res = q
         q = nn.RMSNorm()(q)
         q = GroupedQueryAttention(self.q_heads, self.dims, self.kv_heads)(q, q, mask=mask)
+        q = nn.Dropout(0.1)(q)
         q += res
 
         res = q
         q = nn.RMSNorm()(q)
         kv = nn.RMSNorm()(kv)
         x = GroupedQueryAttention(self.q_heads, self.dims, self.kv_heads)(q, kv)
+        x = nn.Dropout(0.1)(x)
         x += res
 
         res = x
         x = nn.RMSNorm()(x)
         x = SwiGLU(self.dims * 3)(x)
+        x = nn.Dropout(0.1)(x)
         x += res
 
         return x

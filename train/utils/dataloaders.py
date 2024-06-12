@@ -193,7 +193,9 @@ class TranscriptionDataloader(Dataloader):
                 content = f"<|t-{start}|>{content}<|t-{end}|><|voiceprint|>"
                 transcript += content
             transcript += "<|endoftranscript|>"
-            tokens = self.tokenizer.encode(transcript)
+            tokens = self.tokenizer.encode(
+                transcript, enable_sampling=True, alpha=0.1, nbest_size=-1
+            )
             audio_batch.append(audio)
             tokens_batch.append(tokens)
 
