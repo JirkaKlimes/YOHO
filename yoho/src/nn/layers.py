@@ -1,26 +1,7 @@
 from typing import Optional
 import jax.numpy as jnp
 import flax.linen as nn
-
-
-class SinPositionalEncoding(nn.Module):
-    length: int
-    dim: int
-    max_timescale: int = 10000
-
-    def sin_positional_encoding(self) -> jnp.ndarray:
-        """Returns sinusoids for positional embedding"""
-        assert self.dim & 1 == 0, "Number of dimensions must be even"
-        log_timescale_increment = jnp.log(self.max_timescale) / (self.dim // 2 - 1)
-        inv_timescales = jnp.e ** (-log_timescale_increment * jnp.arange(self.dim // 2))
-        scaled_time = jnp.arange(self.length)[:, None] * inv_timescales[None, :]
-        return jnp.concat([jnp.sin(scaled_time), jnp.cos(scaled_time)], axis=1)
-
-    def setup(self):
-        self.encoding_matrix = self.sin_positional_encoding()
-
-    def __call__(self, x):
-        return x + self.encoding_matrix
+from einops import einsum, reduce, rearrange
 
 
 class SwiGLU(nn.Module):
@@ -75,41 +56,41 @@ class GroupedQueryAttention(nn.Module):
         kv: Optional[jnp.ndarray] = None,
         mask: Optional[jnp.ndarray] = None,
     ):
-        # TODO: add kv cache
-        batch_size, q_seq_len, in_dims = q.shape
-        batch_size, kv_seq_len, in_dims = kv.shape
-
-        q_heads = self.q_heads
         kv_heads = self.kv_heads or self.q_heads
         kv = q if kv is None else kv
 
-        assert q_heads % kv_heads == 0, "num of kv heads must be divisible by num of q heads"
-        assert q_heads >= kv_heads, "num of q heads must be greater or equal to num of kv heads"
-        assert self.dims % q_heads == 0, "dims must be divisible by num of q heads"
+        assert self.q_heads >= kv_heads, "Number of Q heads must be greater or equal to number of KV heads."
+        assert self.q_heads % kv_heads == 0, "Number of KV heads must be divisible by number of Q heads."
+        assert self.dims % self.q_heads == 0, "Number of dimensions must be divisible by number of Q heads."
 
-        head_dim = self.dims // q_heads
+        in_dim = q.shape[-1]
+        head_dim = self.dims // self.q_heads
+        groups = self.q_heads // kv_heads
 
-        xq = nn.Dense(q_heads * head_dim, use_bias=False)(q)
-        xk = nn.Dense(kv_heads * head_dim, use_bias=False)(kv)
-        xv = nn.Dense(kv_heads * head_dim, use_bias=False)(kv)
-        xk = xk.repeat(q_heads // kv_heads, axis=-1)
-        xv = xv.repeat(q_heads // kv_heads, axis=-1)
+        q = nn.DenseGeneral((self.q_heads, head_dim), use_bias=False)(q)
+        k = nn.DenseGeneral((kv_heads, head_dim), use_bias=False)(kv)
+        v = nn.DenseGeneral((kv_heads, head_dim), use_bias=False)(kv)
 
-        xq = xq.reshape(batch_size, q_seq_len, q_heads, head_dim)
-        xk = xk.reshape(batch_size, kv_seq_len, q_heads, head_dim)
-        xv = xv.reshape(batch_size, kv_seq_len, q_heads, head_dim)
-        xq = xq.transpose(0, 2, 1, 3)
-        xk = xk.transpose(0, 2, 1, 3)
-        xv = xv.transpose(0, 2, 1, 3)
+        q = rearrange(q, "b s (h g) d -> b g h s d", g=groups)
+        k = rearrange(k, "b s h d -> b h s d")
+        v = rearrange(v, "b s h d -> b h s d")
 
-        xk = xk.transpose(0, 1, 3, 2)
-        attention_scores = (xq @ xk) * head_dim**-0.5
+        rope = RoPE()
+        q = rope(q)
+        k = rope(k)
+
+        scores = einsum(q, k, "b g h s d, b h a d -> b h s a")
         if mask is not None:
-            attention_scores -= 1 / mask - 1
-        attention_scores = nn.softmax(attention_scores)
-        out = (attention_scores @ xv).transpose(0, 2, 1, 3).reshape(batch_size, q_seq_len, -1)
-        out = nn.Dense(in_dims, use_bias=False)(out)
+            mask = rearrange(mask, "s a -> 1 1 s a")
+            scores -= 1 / mask - 1
+        scale = head_dim**0.5
+        attention = nn.softmax(scores / scale)
 
+
+        out = einsum(attention, v, "b h s a, b h a d -> b h s d")
+        out = rearrange(out, "b h s d -> b s h d")
+        out = reduce(out, "b s h d -> b s d", "mean")
+        out = nn.Dense(in_dim, use_bias=False)(out)
         return out
 
 
@@ -129,7 +110,7 @@ class EncoderBlock(nn.Module):
 
         res = x
         x = nn.RMSNorm()(x)
-        x = SwiGLU(self.dims * 3)(x)
+        x = SwiGLU(int(self.dims * 3))(x)
         x += res
 
         return x
@@ -157,7 +138,7 @@ class DecoderBlock(nn.Module):
 
         res = x
         x = nn.RMSNorm()(x)
-        x = SwiGLU(self.dims * 3)(x)
+        x = SwiGLU(int(self.dims * 1.5))(x)
         x += res
 
         return x
