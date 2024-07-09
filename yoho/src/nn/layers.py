@@ -71,25 +71,25 @@ class GroupedQueryAttention(nn.Module):
         k = nn.DenseGeneral((kv_heads, head_dim), use_bias=False)(kv)
         v = nn.DenseGeneral((kv_heads, head_dim), use_bias=False)(kv)
 
-        q = rearrange(q, "b s (h g) d -> b g h s d", g=groups)
-        k = rearrange(k, "b s h d -> b h s d")
-        v = rearrange(v, "b s h d -> b h s d")
+        q = rearrange(q, "... s (h g) d -> ... g h s d", g=groups)
+        k = rearrange(k, "... s h d -> ... h s d")
+        v = rearrange(v, "... s h d -> ... h s d")
 
         rope = RoPE()
         q = rope(q)
         k = rope(k)
 
-        scores = einsum(q, k, "b g h s d, b h a d -> b h s a")
+        scores = einsum(q, k, "... g h s d, ... h a d -> ... h s a")
+
         if mask is not None:
             mask = rearrange(mask, "s a -> 1 1 s a")
             scores -= 1 / mask - 1
+
         scale = head_dim**0.5
         attention = nn.softmax(scores / scale)
 
-
-        out = einsum(attention, v, "b h s a, b h a d -> b h s d")
-        out = rearrange(out, "b h s d -> b s h d")
-        out = reduce(out, "b s h d -> b s d", "mean")
+        out = einsum(attention, v, "... h s a, ... h a d -> ... h s d")
+        out = rearrange(out, "... h s d -> ... s (h d)")
         out = nn.Dense(in_dim, use_bias=False)(out)
         return out
 
